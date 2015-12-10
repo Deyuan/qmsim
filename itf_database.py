@@ -121,11 +121,11 @@ def get_spec_filename(spec_id):
 # Given a spec_id, get client qos spec
 def get_spec(spec_id):
     filename = get_spec_filename(spec_id)
+    path = os.path.join('database/spec/', filename)
     if filename != None:
-        # read path (database/spec/xxx.txt)
-        #spec = QosSpec()
-        #spec.read_in_db(filename)
-        return 0 # a class
+        spec = itf_spec.QosSpec()
+        spec.read_from_file(path)
+        return spec
     else:
         return None
 
@@ -158,4 +158,8 @@ def udpate_container_status(container_addr, new_status):
     filename = get_container_status_filename(container_addr)
     path = os.path.join('database/container/', filename)
     new_status.write_to_file(path)
+
+
+if __name__ == '__main__':
+    print 'QoS Database Accessing Interface.'
 
