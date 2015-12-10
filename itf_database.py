@@ -4,6 +4,7 @@
 
 import os
 import itf_status
+import itf_spec
 
 ##### Data Structures #####
 
@@ -61,6 +62,14 @@ def get_container_list():
                 print '[itf_database] cannot parse line: ' + line
     return container_list
 
+# Get the complete container id list
+def get_container_id_list():
+    container_list = get_container_list()
+    container_id_list = []
+    for record in container_list:
+        container_id_list.append(record.container_id)
+    return container_id_list
+
 # Get the complete spec list
 # Data entry: [spec_id, filename_in_db]
 def get_spec_list():
@@ -73,6 +82,14 @@ def get_spec_list():
             if entry.parse(line) != False:
                 spec_list.append(entry)
     return spec_list
+
+# Get the complete spec id list
+def get_spec_id_list():
+    spec_list = get_spec_list()
+    spec_id_list = []
+    for record in spec_list:
+        spec_id_list.append(record.spec_id)
+    return spec_id_list
 
 # Given a container_id, return all related spec_ids
 def get_spec_ids_on_container(container_id):
@@ -130,11 +147,17 @@ def add_scheduled_spec(spec, containers):
     # update container_list.txt for reservable size
     return
 
-# Given a container_addr and new status class, update the status file in db
+# Update the status file in db
 def update_container_status(container_id, new_status):
     path = os.path.join('database/container/', container_id + '.txt')
     new_status.write_to_file(path)
     # TODO: do not overwrite reservable size
+
+# Update a spec in db
+def update_container_status(spec_id, new_spec):
+    path = os.path.join('database/spec/', spec_id + '.txt')
+    new_spec.write_to_file(path)
+    # TODO: do not overwrite used size
 
 
 if __name__ == '__main__':

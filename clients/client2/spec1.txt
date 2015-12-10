@@ -3,6 +3,7 @@ SpecId, client2-spec1
 Availability, 99
 Reliability, 999
 ReservedSize, 10000	# MB
+UsedSize, 0	# MB
 DataIntegrity, 1	# 0:worst
 Bandwidth, Low	# High or Low
 Latency, High	# High or Low

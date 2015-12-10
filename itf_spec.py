@@ -9,6 +9,7 @@ class QosSpec:
         self.Availability = 99          # (int) an integer with a presumed leading 0
         self.Reliability = 90           # (int) an integer with a presumed leading 0
         self.ReservedSize = 0           # (int) MB
+        self.UsedSize = 0               # (int) MB
         self.DataIntegrity = 0          # (int) range 0 to 10**6, 0 is worst
         # flexible requirements
         self.Bandwidth = 'Low'          # (str) 'High' or 'Low'
@@ -35,6 +36,8 @@ class QosSpec:
                 self.Reliability = int(float(val))
             elif key == 'ReservedSize':
                 self.ReservedSize = int(float(val))
+            elif key == 'UsedSize':
+                self.UsedSize = int(float(val))
             elif key == 'DataIntegrity':
                 self.DataIntegrity = int(float(val))
             elif key == 'Bandwidth':
@@ -73,6 +76,7 @@ class QosSpec:
              + 'Availability'     + ', ' + str(self.Availability      ) + '\n' \
              + 'Reliability'      + ', ' + str(self.Reliability       ) + '\n' \
              + 'ReservedSize'     + ', ' + str(self.ReservedSize      ) + '\t# MB\n' \
+             + 'UsedSize'         + ', ' + str(self.UsedSize          ) + '\t# MB\n' \
              + 'DataIntegrity'    + ', ' + str(self.DataIntegrity     ) + '\t# 0:worst\n' \
              + 'Bandwidth'        + ', ' + str(self.Bandwidth         ) + '\t# High or Low\n' \
              + 'Latency'          + ', ' + str(self.Latency           ) + '\t# High or Low\n' \
