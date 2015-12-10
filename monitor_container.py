@@ -7,6 +7,7 @@ import time
 
 import itf_database
 import itf_status
+import monitor_qos
 
 # Wrapper for pulling a file from remote container on Internet
 def get_container_status(container_addr):
@@ -29,9 +30,11 @@ def update(record):
             itf_database.update_container_status(record.container_id, status_remote)
         else:
             # TODO: compare
+            itf_database.update_container_status(record.container_id, status_remote)
             # call QoS Monitor
             print '[Container Monitor] Call QoS Monitor for ' + record.container_id
-            return
+            monitor_qos.monitor_container(record.container_id)
+
 
 # Container Monitor Mainloop
 if __name__ == '__main__':
