@@ -10,28 +10,8 @@ import itf_status
 # A container record: a line in the container_list.txt
 class ContainerRecord:
     def __init__(self):
+        self.container_id = ''
         self.container_addr = ''
-        self.filename = ''
-        self.reservable_size = ''
-
-    # parse a line
-    def parse(self, s):
-        info = s.split('#')[0].split(',')
-        if len(info) != 3:
-            return False
-        for i in range(0, 3):
-            info[i] = info[i].strip()
-            if info[i] == '':
-                return False
-        self.container_addr = info[0]
-        self.filename = info[1]
-        self.reservable_size = info[2]
-
-# A spec record: a line in the spec_list.txt
-class SpecRecord:
-    def __init__(self):
-        self.spec_id = ''
-        self.filename = ''
 
     # parse a line
     def parse(self, s):
@@ -42,89 +22,86 @@ class SpecRecord:
         info[1] = info[1].strip()
         if info[0] == '' or info[1] == '':
             return False
-        self.spec_id = info[0]
-        self.filename = info[1]
+        self.container_id = info[0]
+        self.container_addr = info[1]
+
+    def dump(self):
+        print '[itf_database] Container: id=' + self.container_id \
+                + ' (addr:' + self.container_addr + ') [' + self.container_id + '.txt]'
+
+# A spec record: a line in the spec_list.txt
+class SpecRecord:
+    def __init__(self):
+        self.spec_id = ''
+
+    # parse a line
+    def parse(self, s):
+        info = s.split('#')[0].strip()
+        if info == '':
+            return False
+        self.spec_id = info
+
+    def dump(self):
+        print '[itf_database] Spec:' + self.spec_id + ' [' + self.spec_id + '.txt]'
 
 ##### DB READ #####
 
-# Get the complete container_addr list
-# Data entry: [container_addr, status_file_name_in_db, reservable_size]
-def get_container_addrs():
+# Get the complete container list
+# Data entry: [container_id, container_addr, filename_in_db]
+def get_container_list():
     # read and parse database/meta/container_list.txt
-    container_addr_list = []
+    container_list = []
     with open('database/meta/container_list.txt', 'r') as f:
         data = f.read().splitlines()
         for line in data:
             entry = ContainerRecord()
             if entry.parse(line) != False:
-                container_addr_list.append(entry)
-    return container_addr_list
+                container_list.append(entry)
+            else:
+                print '[itf_database] cannot parse line: ' + line
+    return container_list
 
-# Get the complete spec_id list
-# Data entry: [spec_id, spec_file_name_in_db]
-def get_spec_ids();
+# Get the complete spec list
+# Data entry: [spec_id, filename_in_db]
+def get_spec_list():
     # read and parse database/meta/spec_list.txt
-    spec_id_list = []
+    spec_list = []
     with open('database/meta/spec_list.txt', 'r') as f:
         data = f.read().splitlines()
         for line in data:
             entry = SpecRecord()
             if entry.parse(line) != False:
-                spec_id_list.append(entry)
-    return spec_id_list
+                spec_list.append(entry)
+    return spec_list
 
-# Given a container_addr, return all related spec_id
-def get_spec_ids_on_container(container_addr):
+# Given a container_id, return all related spec_ids
+def get_spec_ids_on_container(container_id):
     # read database/meta/container_to_spec.txt
 
     return []
 
-# Given a spec_id, return all related container_addr
-def get_container_addrs_for_spec(spec_id):
+# Given a spec_id, return all related container_ids
+def get_container_ids_for_spec(spec_id):
     # read database/meta/spec_to_container.txt
 
     return []
 
-# Given a container_addr, return status file name in db
-def get_container_status_filename(container_addr):
-    # read database/meta/container_list.txt and get status file path
-    filename = None
-    container_addrs = get_container_addrs()
-    for addr in container_addrs:
-        if container_addr == addr[0]:
-            filename = addr[1]
-            break;
-    return filename
-
-# Given a container_addr, get container status
-def get_container_status(container_addr):
-    filename = get_container_status_filename(container_addr)
-    path = os.path.join('database/container/', filename)
-    if filename != None:
-        status = itf_status.ContainerStatus()
-        status.read_from_file(path)
+# Given a container_id, get container status
+def get_status(container_id):
+    path = os.path.join('database/container/', container_id + '.txt')
+    status = itf_status.ContainerStatus()
+    succ = status.read_from_file(path)
+    if succ == True:
         return status
     else:
         return None
 
-# Given a spec_id, return client qos spec file name in db
-def get_spec_filename(spec_id):
-    # read database/meta/spec_list.txt and get spec file path
-    filename = None
-    spec_ids = get_spec_ids()
-    for sid in spec_ids:
-        if sped_id == sid[0]:
-            filename = sid[1]
-            break;
-    return filename
-
 # Given a spec_id, get client qos spec
 def get_spec(spec_id):
-    filename = get_spec_filename(spec_id)
-    path = os.path.join('database/spec/', filename)
-    if filename != None:
-        spec = itf_spec.QosSpec()
-        spec.read_from_file(path)
+    path = os.path.join('database/spec/', spec_id + '.txt')
+    spec = itf_spec.QosSpec()
+    succ = spec.read_from_file(path)
+    if succ == True:
         return spec
     else:
         return None
@@ -154,12 +131,22 @@ def add_scheduled_spec(spec, containers):
     return
 
 # Given a container_addr and new status class, update the status file in db
-def udpate_container_status(container_addr, new_status):
-    filename = get_container_status_filename(container_addr)
-    path = os.path.join('database/container/', filename)
+def update_container_status(container_id, new_status):
+    path = os.path.join('database/container/', container_id + '.txt')
     new_status.write_to_file(path)
+    # TODO: do not overwrite reservable size
 
 
 if __name__ == '__main__':
-    print 'QoS Database Accessing Interface.'
+    print '[itf_database] QoS Database Accessing Interface.'
+    container_list = get_container_list()
+    for record in container_list:
+        record.dump()
+        status = get_status(record.container_id)
+
+    spec_list = get_spec_list()
+    for record in spec_list:
+        record.dump()
+        spec = get_spec(record.spec_id)
+
 

@@ -16,48 +16,55 @@ class QosSpec:
         # extra information
         self.PhysicalLocation = ''      # (str) hierarchical phisical location
 
-    # Read a spec file
+    # Parse spec from a string
+    def parse_string(self, spec_string):
+        spec = spec_string.splitlines()
+        for line in spec:
+            info = line.split('#')[0].split(',')
+            if len(info) < 2:
+                continue
+            key = info[0].strip()
+            val = info[1].strip()
+            if key == '' or val == '':
+                continue
+            if key == 'SpecId':
+                self.SpecId = val
+            elif key == 'Availability':
+                self.Availability = int(float(val))
+            elif key == 'Reliability':
+                self.Reliability = int(float(val))
+            elif key == 'ReservedSize':
+                self.ReservedSize = int(float(val))
+            elif key == 'DataIntegrity':
+                self.DataIntegrity = int(float(val))
+            elif key == 'Bandwidth':
+                if val == 'high' or val == 'High' or val == 'HIGH':
+                    self.Bandwidth = 'High'
+                else:
+                    self.Bandwidth = 'Low'
+            elif key == 'Latency':
+                if val == 'high' or val == 'High' or val == 'HIGH':
+                    self.Latency = 'High'
+                else:
+                    self.Latency = 'Low'
+            elif key == 'PhysicalLocation':
+                # a list of locaiton separated by ','
+                self.PhysicalLocation = []
+                for i in range(1, len(info)):
+                    self.PhysicalLocation.append(info[i].strip())
+            else:
+                print '[itf_spec] Warning: Cannot parse: ' + line
+
+    # Read spec from a file
     def read_from_file(self, path):
         try:
-            with open(path, 'r') as f:
-                spec = f.read().splitlines()
-                for line in spec:
-                    info = line.split('#')[0].split(',')
-                    if len(info) < 2:
-                        continue
-                    key = info[0].strip()
-                    val = info[1].strip()
-                    if val == '':
-                        continue
-                    if key == 'SpecId':
-                        self.SpecId = val
-                    elif key == 'Availability':
-                        self.Availability = int(float(val))
-                    elif key == 'Reliability':
-                        self.Reliability = int(float(val))
-                    elif key == 'ReservedSize':
-                        self.ReservedSize = int(float(val))
-                    elif key == 'DataIntegrity':
-                        self.DataIntegrity = int(float(val))
-                    elif key == 'Bandwidth':
-                        if val == 'high' or val == 'High' or val == 'HIGH':
-                            self.Bandwidth = 'High'
-                        else:
-                            self.Bandwidth = 'Low'
-                    elif key == 'Latency':
-                        if val == 'high' or val == 'High' or val == 'HIGH':
-                            self.Latency = 'High'
-                        else:
-                            self.Latency = 'Low'
-                    elif key == 'PhysicalLocation':
-                        # a list of locaiton separated by ','
-                        self.PhysicalLocation = []
-                        for i in range(1, len(info)):
-                            self.PhysicalLocation.append(info[i].strip())
-            return True
+            f = open(path, 'r')
         except:
-            print '[QoS Spec] Error: Cannot parse' + path
+            print '[itf_spec] Error: Cannot parse' + path
             return False
+        spec = f.read()
+        self.parse_string(spec)
+        return True
 
     # Generate a multi-line string
     def to_string(self):
@@ -80,6 +87,7 @@ class QosSpec:
 
     # Write spec to a file
     def write_to_file(self, path):
+        # TODO: atomic and file lock
         try:
             with open(path, 'w') as f:
                 spec = self.to_string()
@@ -92,7 +100,9 @@ class QosSpec:
 # Testing
 if __name__ == '__main__':
     spec = QosSpec()
-    print spec.to_string()
+    spec_str = spec.to_string()
+    print spec_str
+    spec.parse_string(spec_str)
     spec.write_to_file('spec.txt')
     spec.read_from_file('spec.txt')
 

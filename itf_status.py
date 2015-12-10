@@ -26,59 +26,66 @@ class ContainerStatus:
         # extra information
         self.PhysicalLocation = ''       # (str) hierarchical phisical location
 
-    # Read a status file
+    # Parse status from a string
+    def parse_string(self, status_string):
+        status = status_string.splitlines()
+        for line in status:
+            info = line.split('#')[0].split(',')
+            if len(info) < 2:
+                continue
+            key = info[0].strip()
+            val = info[1].strip()
+            if key == '' or val == '':
+                continue
+            if key == 'ContainerId':
+                self.ContainerId = val
+            elif key == 'StorageTotal':
+                self.StorageTotal = int(float(val))
+            elif key == 'PathToSwitch':
+                self.PathToSwitch = val
+            elif key == 'CoresAvailable':
+                self.CoresAvailable = int(float(val))
+            elif key == 'StorageRBW':
+                self.StorageRBW = float(val)
+            elif key == 'StorageWBW':
+                self.StorageWBW = float(val)
+            elif key == 'StorageRLatency':
+                self.StorageRLatency = int(float(val))
+            elif key == 'StorageWLatency':
+                self.StorageWLatency = int(float(val))
+            elif key == 'StorageRAIDLevel':
+                self.StorageRAIDLevel = int(float(val))
+            elif key == 'CostPerGBMonth':
+                self.CostPerGBMonth = float(val)
+            elif key == 'DataIntegrity':
+                self.DataIntegrity = int(float(val))
+            elif key == 'StorageReservable':
+                self.StorageReservable = int(float(val))
+            elif key == 'StorageUsed':
+                self.StorageUsed = int(float(val))
+            elif key == 'StorageReliability':
+                self.StorageReliability = int(float(val))
+            elif key == 'ContainerAvailability':
+                self.ContainerAvailability = int(float(val))
+            elif key == 'StorageRBW_dyn':
+                self.StorageRBW_dyn = float(val)
+            elif key == 'StorageWBW_dyn':
+                self.StorageWBW_dyn = float(val)
+            elif key == 'PhysicalLocation':
+                self.PhysicalLocation = val
+            else:
+                print '[itf_status] Warning: Cannot parse: ' + line
+
+    # Read status from a file
     def read_from_file(self, path):
         try:
-            with open(path, 'r') as f:
-                status = f.read().splitlines()
-                for line in status:
-                    info = line.split('#')[0].split(',')
-                    if len(info) < 2:
-                        continue
-                    key = info[0].strip()
-                    val = info[1].strip()
-                    if val == '':
-                        continue
-                    if key == 'ContainerId':
-                        self.ContainerId = val
-                    elif key == 'StorageTotal':
-                        self.StorageTotal = int(float(val))
-                    elif key == 'PathToSwitch':
-                        self.PathToSwitch = val
-                    elif key == 'CoresAvailable':
-                        self.CoresAvailable = int(float(val))
-                    elif key == 'StorageRBW':
-                        self.StorageRBW = float(val)
-                    elif key == 'StorageWBW':
-                        self.StorageWBW = float(val)
-                    elif key == 'StorageRLatency':
-                        self.StorageRLatency = int(float(val))
-                    elif key == 'StorageWLatency':
-                        self.StorageWLatency = int(float(val))
-                    elif key == 'StorageRAIDLevel':
-                        self.StorageRAIDLevel = int(float(val))
-                    elif key == 'CostPerGBMonth':
-                        self.CostPerGBMonth = float(val)
-                    elif key == 'DataIntegrity':
-                        self.DataIntegrity = int(float(val))
-                    elif key == 'StorageReservable':
-                        self.StorageReservable = int(float(val))
-                    elif key == 'StorageUsed':
-                        self.StorageUsed = int(float(val))
-                    elif key == 'StorageReliability':
-                        self.StorageReliability = int(float(val))
-                    elif key == 'ContainerAvailability':
-                        self.ContainerAvailability = int(float(val))
-                    elif key == 'StorageRBW_dyn':
-                        self.StorageRBW_dyn = float(val)
-                    elif key == 'StorageWBW_dyn':
-                        self.StorageWBW_dyn = float(val)
-                    elif key == 'PhysicalLocation':
-                        self.PhysicalLocation = val
-            return True
+            f = open(path, 'r')
         except:
-            print '[Container Status] Error: Cannot parse' + path
+            print '[itf_status] Error: Cannot open: ' + path
             return False
+        status = f.read()
+        self.parse_string(status)
+        return True
 
     # Generate a multi-line string
     def to_string(self):
@@ -105,19 +112,22 @@ class ContainerStatus:
 
     # Write status to a file
     def write_to_file(self, path):
+        # TODO: atomic and file lock
         try:
             with open(path, 'w') as f:
                 status = self.to_string()
                 f.write(status)
             return True
         except:
-            print '[Container Status] Error: Cannot write to ' + path
+            print '[itf_status] Error: Cannot write to ' + path
             return False
 
 # Testing
 if __name__ == '__main__':
     status = ContainerStatus()
-    print status.to_string()
+    status_str = status.to_string()
+    print status_str
+    status.parse_string(status_str)
     status.write_to_file('status.txt')
     status.read_from_file('status.txt')
 
