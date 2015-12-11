@@ -1,9 +1,10 @@
 # QoS Manager
 # Managing all requests related to QoS
-# Author: Deyuan Guo
+# Author: Deyuan Guo, Chunkun Bo
 # Date: Dec 10, 2015
 
 import sys
+import monitor_container
 
 # Wrapper for calling scheduler
 def call_scheduler(spec, task):
@@ -20,6 +21,8 @@ def call_container_monitor(container_address, task):
 def get_request():
     if len(sys.argv) != 3:
         print 'Usage: qos_manager.py -command argument'
+        print 'Commands:'
+        print '    -new_container container_address'
         exit()
     command = sys.argv[1]
     argument = sys.argv[2]
@@ -80,9 +83,9 @@ if __name__ == '__main__':
             exit_and_do_nothing() #?
 
     elif command == '-new_container':
-        # this request is from system manager when creating new container
-        # we need to access the actual container, get the location information and status, inserted a term into the container_list in db, and update status file in db
-        call_container_monitor(info, task='new')
+        print '[QoS Manager] Add a new container: ' + info
+        # this request is from system admin when creating new container
+        monitor_container.insert(info)  # insert status to db
         exit()
 
     else:
