@@ -1,4 +1,5 @@
 # Container Monitor
+# Monitoring container status, updating to database, and checking related specs
 # Author: Chunkun Bo, Deyuan Guo
 # Date: Dec 9, 2015
 
@@ -27,13 +28,25 @@ def update(record):
     else:
         if status_in_db == None:
             print '[Container Monitor] Insert ' + record.container_id + ' status to database.'
+            # Default reserved size = 0
             itf_database.update_container_status(record.container_id, status_remote)
         else:
-            # TODO: compare
+            # Avoid overwriting the reservable size (container doesn't know this)
+            status_remote.StorageReserved = status_in_db.StorageReserved
             itf_database.update_container_status(record.container_id, status_remote)
             # call QoS Monitor
             print '[Container Monitor] Call QoS Monitor for ' + record.container_id
             monitor_qos.monitor_container(record.container_id)
+
+# Insert a new container status to database, called by QoS Manager
+def insert(container_addr):
+    status_remote = get_container_status(container_addr)
+    container_id = status_remote.ContainerId
+    added = itf_database.add_to_container_list(container_id, container_addr)
+    if added == True:
+        print '[Container Monitor] Insert ' + container_id + ' status to database.'
+        # Default reserved size = 0
+        itf_database.update_container_status(container_id, status_remote)
 
 
 # Container Monitor Mainloop
@@ -46,6 +59,6 @@ if __name__ == '__main__':
             print '[Container Monitor] Check ' + record.container_id + \
                   ' (' + record.container_addr + ')'
             update(record)
-            time.sleep(5)
-        time.sleep(20)
+            time.sleep(3)
+        time.sleep(10)
 
