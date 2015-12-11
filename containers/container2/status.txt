@@ -14,6 +14,6 @@ StorageReserved, 0	# MB
 StorageUsed, 0	# MB
 StorageReliability, 999
 ContainerAvailability, 99
-StorageRBW_dyn, 0	# MB/s
-StorageWBW_dyn, 0	# MB/s
+StorageRBW_dyn, 0.0	# MB/s
+StorageWBW_dyn, 0.0	# MB/s
 PhysicalLocation, /usa/virginia/uva/cs
