@@ -10,7 +10,7 @@ StorageWLatency, 100	# uSec
 StorageRAIDLevel, 1
 CostPerGBMonth, 2.0	# $
 DataIntegrity, 2	# 0:worst
-StorageReservable, -1	# MB
+StorageReserved, 0	# MB
 StorageUsed, 0	# MB
 StorageReliability, 999
 ContainerAvailability, 99
