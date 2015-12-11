@@ -1,6 +1,6 @@
 # QoS Monitor
 # This monitor will be triggered when the status of a container changed
-# Author: Deyuan Guo
+# Author: Deyuan Guo, Chunkun Bo
 # Date: Dec 9, 2015
 
 import qos_checker
@@ -13,9 +13,9 @@ def monitor_spec(spec_id):
     container_id_list = itf_database.get_container_ids_for_spec(spec_id)
     satisfied = qos_checker.check_satisfiability(spec_id, container_id_list)
     if not satisfied:
+        print '[QoS Monitor] Reschedule for unsatisfied spec: ' + spec_id
         #TODO: call qos manager:
         # qos_manager -reschedule spec_path_in_db
-        print '[QoS Monitor] Reschedule for unsatisfied spec: ' + spec_id
 
 # Monitor QoS specs related to a container
 def monitor_container(container_id):

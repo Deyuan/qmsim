@@ -11,7 +11,7 @@ import itf_database
 # Rule: for every container, free space >= (client reserved - client used)
 def check_space(spec, container_status):
     for status in container_status:
-        if status.StorageReservable < spec.ReservedSize - spec.UsedSize:
+        if status.StorageTotal - status.StorageUsed < spec.ReservedSize - spec.UsedSize:
             return False
     return True
 
@@ -46,6 +46,8 @@ def check_bandwidth(spec, container_status):
         return True
     else:
         BW_threshold = 5  # assume 5 MB/s is high enough
+        # TODO: how to pick prefered container? consider client used bw.
+        # TODO: Multiple clients from different location, how to assign container?
         prefered = container_status[0]
         free_RBW = prefered.StorageRBW - prefered.StorageRBW_dyn
         free_WBW = prefered.StorageWBW - prefered.StorageWBW_dyn
@@ -57,6 +59,8 @@ def check_bandwidth(spec, container_status):
 
 # QoS Checker main entry: Check if a list of container can satisfy a spec
 def check_satisfiability(spec_id, container_id_list):
+    print '[QoS Checker] Check satisfiability of spec ' + spec_id + \
+            ' on containers ' + str(container_id_list)
     satisfied = True
     spec = itf_database.get_spec(spec_id)
     if len(container_id_list) == 0: # not scheduled
@@ -86,6 +90,8 @@ def check_satisfiability(spec_id, container_id_list):
     if not satisfied:
         print '[QoS Checker] Bandwidth not satisfied for spec: ' + spec_id
 
+    if satisfied:
+        print '[QoS Checker] Spec ' + spec_id + ' is satisfied on ' + str(container_id_list)
     return satisfied
 
 
