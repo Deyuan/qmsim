@@ -1,5 +1,5 @@
 # QoS Database Accessing Interface
-# Author: Deyuan Guo
+# Author: Deyuan Guo, Chunkun Bo
 # Date: Dec 9, 2015
 
 import os
@@ -14,9 +14,8 @@ class ContainerRecord:
         self.container_id = ''
         self.container_addr = ''
 
-    # parse a line
-    def parse(self, s):
-        info = s.split('#')[0].split(',')
+    def parse(self, line):
+        info = line.split('#')[0].split(',')
         if len(info) != 2:
             return False
         info[0] = info[0].strip()
@@ -35,15 +34,43 @@ class SpecRecord:
     def __init__(self):
         self.spec_id = ''
 
-    # parse a line
-    def parse(self, s):
-        info = s.split('#')[0].strip()
+    def parse(self, line):
+        info = line.split('#')[0].strip()
         if info == '':
             return False
         self.spec_id = info
 
     def dump(self):
         print '[itf_database] Spec:' + self.spec_id + ' [' + self.spec_id + '.txt]'
+
+# A map from a spec to a list of containers
+class SpecToContainers:
+    def __init__(self):
+        self.spec_id = ''
+        self.container_ids = []
+
+    def parse(self, line):
+        info = line.split('#')[0].split(',')
+        if len(info) < 2:
+            return False
+        self.spec_id = info[0].strip()
+        for i in range(1, len(info)):
+            self.container_ids.append(info[i].strip())
+
+# A map from a container to a list of specs
+class ContainerToSpecs:
+    def __init__(self):
+        self.container_id = ''
+        self.spec_ids = []
+
+    def parse(self, line):
+        info = line.split('#')[0].split(',')
+        if len(info) < 2:
+            return False
+        self.container_id = info[0].strip()
+        for i in range(1, len(info)):
+            self.spec_ids.append(info[i].strip())
+
 
 ##### DB READ #####
 
@@ -52,14 +79,17 @@ class SpecRecord:
 def get_container_list():
     # read and parse database/meta/container_list.txt
     container_list = []
-    with open('database/meta/container_list.txt', 'r') as f:
-        data = f.read().splitlines()
-        for line in data:
-            entry = ContainerRecord()
-            if entry.parse(line) != False:
-                container_list.append(entry)
-            else:
-                print '[itf_database] cannot parse line: ' + line
+    try:
+        with open('database/meta/container_list.txt', 'r') as f:
+            data = f.read().splitlines()
+            for line in data:
+                entry = ContainerRecord()
+                if entry.parse(line) != False:
+                    container_list.append(entry)
+                else:
+                    print '[itf_database] cannot parse line: ' + line
+    except:
+        print '[itf_database] container_list.txt does not exist.'
     return container_list
 
 # Get the complete container id list
@@ -91,16 +121,42 @@ def get_spec_id_list():
         spec_id_list.append(record.spec_id)
     return spec_id_list
 
-# Given a container_id, return all related spec_ids
-def get_spec_ids_on_container(container_id):
-    # read database/meta/container_to_spec.txt
+# Get the complete spec-to-container map
+def get_spec_to_container_map():
+    s2c_map = []
+    with open('database/meta/spec_to_container.txt', 'r') as f:
+        data = f.read().splitlines()
+        for line in data:
+            entry = SpecToContainers()
+            if entry.parse(line) != False:
+                s2c_map.append(entry)
+    return s2c_map
 
-    return []
+# Get the complete container-to-spec map
+def get_container_to_spec_map():
+    c2s_map = []
+    with open('database/meta/container_to_spec.txt', 'r') as f:
+        data = f.read().splitlines()
+        for line in data:
+            entry = ContainerToSpecs()
+            if entry.parse(line) != False:
+                c2s_map.append(entry)
+    return c2s_map
 
 # Given a spec_id, return all related container_ids
 def get_container_ids_for_spec(spec_id):
-    # read database/meta/spec_to_container.txt
+    s2c_map = get_spec_to_container_map()
+    for entry in s2c_map:
+        if spec_id == entry.spec_id:
+            return entry.container_ids
+    return []
 
+# Given a container_id, return all related spec_ids
+def get_spec_ids_on_container(container_id):
+    c2s_map = get_container_to_spec_map()
+    for entry in c2s_map:
+        if container_id == entry.container_id:
+            return entry.spec_ids
     return []
 
 # Given a container_id, get container status
@@ -126,12 +182,27 @@ def get_spec(spec_id):
 ##### DB WRITE #####
 
 # Add a new container to the database
-def add_new_container(container_addr):
-    # write addr, filename, size to database/meta/container_list.txt
+def add_to_container_list(container_id, container_addr):
+    # write to database/meta/container_list.txt
+    container_list = get_container_list()
+    for record in container_list:
+        if record.container_id == container_id:
+            print '[itf_database] Container ID ' + container_id + ' already exists.'
+            return False
 
-    # write to database/meta/container_to_spec.txt
+    record = ContainerRecord()
+    record.container_id = container_id
+    record.container_addr = container_addr
+    container_list.append(record)
 
-    # wait for container-monitor to update status.txt
+    string = ''
+    for record in container_list:
+        string += record.container_id + ', ' + record.container_addr + '\n'
+
+    f = open('database/meta/container_list.txt', 'w')
+    f.write(string)
+    f.close()
+
     return True
 
 # Add a new scheduled spec and containers into db
@@ -149,15 +220,15 @@ def add_scheduled_spec(spec, containers):
 
 # Update the status file in db
 def update_container_status(container_id, new_status):
+    # caller should make sure that new_status.StorageReserved is updated
     path = os.path.join('database/container/', container_id + '.txt')
     new_status.write_to_file(path)
-    # TODO: do not overwrite reservable size
 
 # Update a spec in db
-def update_container_status(spec_id, new_spec):
+def update_client_spec(spec_id, new_spec):
+    # caller should make sure that new_spec.UsedSize is updated
     path = os.path.join('database/spec/', spec_id + '.txt')
     new_spec.write_to_file(path)
-    # TODO: do not overwrite used size
 
 
 if __name__ == '__main__':
