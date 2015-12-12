@@ -17,15 +17,13 @@ def get_request():
     usage += 'Commands:\n'
     usage += '    -schedule spec_file_path\n'
     usage += '    -new_container container_address\n'
+    usage += '    -show_database\n'
     usage += '    -clean_database\n'
 
     if len(sys.argv) == 2:
         command = sys.argv[1]
-        if command == '-clean_database':
+        if command == '-show_database' or command == '-clean_database':
             return command, ''
-        else:
-            print usage
-            exit()
     elif len(sys.argv) == 3:
         command = sys.argv[1]
         argument = sys.argv[2]
@@ -38,6 +36,7 @@ def get_request():
             param = argument
         return command, param
 
+    print '=== QoS Manager ===\nDeveloped by Deyuan Guo and Chunkun Bo.\n'
     print usage
     exit()
 
@@ -51,9 +50,8 @@ def get_request():
 # ...
 
 if __name__ == '__main__':
-    print '=== QoS Manager ===\nDeveloped by Deyuan Guo and Chunkun Bo.\n'
-
     command, info = get_request()
+
     print '[QoS Manager] Incoming request: ' + command
     if info != '':
         print 'Information:\n--------------------'
@@ -112,6 +110,10 @@ if __name__ == '__main__':
         # this request is from system admin when creating new container
         monitor_container.insert(info)  # insert status to db
         exit()
+
+    elif command == '-show_database':
+        print '[QoS Manager] QoS database summary:'
+        itf_database.summary()
 
     elif command == '-clean_database':
         print '[QoS Manager] Clearing all contents in the QoS database?'

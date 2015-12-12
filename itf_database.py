@@ -28,7 +28,8 @@ class ContainerRecord:
 
     def dump(self):
         print '[itf_database] Container: id=' + self.container_id \
-                + ' (addr:' + self.container_addr + ') [' + self.container_id + '.txt]'
+                + ' (addr:' + self.container_addr + ') [' \
+                + self.container_id + '.txt]'
 
 # A spec record: a line in the spec_list.txt
 class SpecRecord:
@@ -42,7 +43,8 @@ class SpecRecord:
         self.spec_id = info
 
     def dump(self):
-        print '[itf_database] Spec:' + self.spec_id + ' [' + self.spec_id + '.txt]'
+        print '[itf_database] Spec:' + self.spec_id + ' [' \
+                + self.spec_id + '.txt]'
 
 # A map from a spec to a list of containers
 class SpecToContainers:
@@ -58,6 +60,10 @@ class SpecToContainers:
         for i in range(1, len(info)):
             self.container_ids.append(info[i].strip())
 
+    def dump(self):
+        print '[itf_database] Spec: ' + self.spec_id + ' -> ' \
+                + str(self.container_ids)
+
 # A map from a container to a list of specs
 class ContainerToSpecs:
     def __init__(self):
@@ -72,6 +78,10 @@ class ContainerToSpecs:
         for i in range(1, len(info)):
             self.spec_ids.append(info[i].strip())
 
+    def dump(self):
+        print '[itf_database] Container: ' + self.container_id + ' -> ' \
+                + str(self.spec_ids)
+
 
 ##### DB READ #####
 
@@ -84,9 +94,9 @@ def get_container_list():
         with open('database/meta/container_list.txt', 'r') as f:
             data = f.read().splitlines()
             for line in data:
-                entry = ContainerRecord()
-                if entry.parse(line) != False:
-                    container_list.append(entry)
+                record = ContainerRecord()
+                if record.parse(line) != False:
+                    container_list.append(record)
                 else:
                     print '[itf_database] cannot parse line: ' + line
     except:
@@ -109,9 +119,9 @@ def get_spec_list():
     with open('database/meta/spec_list.txt', 'r') as f:
         data = f.read().splitlines()
         for line in data:
-            entry = SpecRecord()
-            if entry.parse(line) != False:
-                spec_list.append(entry)
+            record = SpecRecord()
+            if record.parse(line) != False:
+                spec_list.append(record)
     return spec_list
 
 # Get the complete spec id list
@@ -128,9 +138,9 @@ def get_spec_to_container_map():
     with open('database/meta/spec_to_container.txt', 'r') as f:
         data = f.read().splitlines()
         for line in data:
-            entry = SpecToContainers()
-            if entry.parse(line) != False:
-                s2c_map.append(entry)
+            record = SpecToContainers()
+            if record.parse(line) != False:
+                s2c_map.append(record)
     return s2c_map
 
 # Get the complete container-to-spec map
@@ -139,9 +149,9 @@ def get_container_to_spec_map():
     with open('database/meta/container_to_spec.txt', 'r') as f:
         data = f.read().splitlines()
         for line in data:
-            entry = ContainerToSpecs()
-            if entry.parse(line) != False:
-                c2s_map.append(entry)
+            record = ContainerToSpecs()
+            if record.parse(line) != False:
+                c2s_map.append(record)
     return c2s_map
 
 # Given a spec_id, return all related container_ids
@@ -192,7 +202,8 @@ def add_to_container_list(container_id, container_addr):
     container_list = get_container_list()
     for record in container_list:
         if record.container_id == container_id:
-            print '[itf_database] Container ID ' + container_id + ' already exists.'
+            print '[itf_database] Container ID ' + container_id \
+                    + ' already exists.'
             return False
 
     record = ContainerRecord()
@@ -268,16 +279,49 @@ def clean():
     shutil.rmtree('database')
     init()
 
+# Show the summary of the QoS database
+def summary():
+    print '--------------------'
+    print '[itf_database] Container list:'
+    container_list = get_container_list()
+    if len(container_list) == 0:
+        print 'Empty'
+    else:
+        for record in container_list:
+            record.dump()
+            #status = get_status(record.container_id)
+
+    print '--------------------'
+    print '[itf_database] Spec list:'
+    spec_list = get_spec_list()
+    if len(spec_list) == 0:
+        print 'Empty'
+    else:
+        for record in spec_list:
+            record.dump()
+            #spec = get_spec(record.spec_id)
+
+    print '--------------------'
+    print '[itf_database] Container-to-spec mapping:'
+    container_map = get_container_to_spec_map()
+    if len(container_map) == 0:
+        print 'Empty'
+    else:
+        for record in container_map:
+            record.dump()
+
+    print '--------------------'
+    print '[itf_database] Spec-to-container mapping:'
+    spec_map = get_spec_to_container_map()
+    if len(spec_map) == 0:
+        print 'Empty'
+    else:
+        for record in spec_map:
+            record.dump()
+
+
+# Only for testing
 if __name__ == '__main__':
     print '[itf_database] QoS Database Accessing Interface.'
-    container_list = get_container_list()
-    for record in container_list:
-        record.dump()
-        status = get_status(record.container_id)
-
-    spec_list = get_spec_list()
-    for record in spec_list:
-        record.dump()
-        spec = get_spec(record.spec_id)
-
+    summary()
 
