@@ -63,7 +63,7 @@ class QosSpec:
         try:
             f = open(path, 'r')
         except:
-            print '[itf_spec] Error: Cannot parse' + path
+            print '[itf_spec] Error: Cannot parse ' + path
             return False
         spec = f.read()
         self.parse_string(spec)
