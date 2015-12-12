@@ -5,35 +5,41 @@
 
 import sys
 import monitor_container
+import qos_scheduler
+import itf_spec
+import itf_database
 
-# Wrapper for calling scheduler
-def call_scheduler(spec, task):
-    return
 
-# Wrapper for calling container_monitor
-def call_container_monitor(container_address, task):
-    # insert record to db, etc.
-    # notify container_monitor because container_monitor is always running
-    # orelse we can run a new process to deal with this new request
-    return
-
-# Wrapper for receiving incoming request, currently we use command line arguments. This part can be socket interface
+# Wrapper for receiving incoming request, currently we use command line
+# arguments. This part can be socket interface
 def get_request():
-    if len(sys.argv) != 3:
-        print 'Usage: qos_manager.py -command argument'
-        print 'Commands:'
-        print '    -new_container container_address'
-        exit()
-    command = sys.argv[1]
-    argument = sys.argv[2]
-    if command == '-new_spec' or command == '-update_spec' or command == '-reschedule':
-        with open(argument, 'r') as f:
-            info = f.read()
-    else:
-        info = argument
+    usage = 'Usage: python qos_manager.py -command argument\n'
+    usage += 'Commands:\n'
+    usage += '    -schedule spec_file_path\n'
+    usage += '    -new_container container_address\n'
+    usage += '    -clean_database\n'
 
-    # if we get request from Internet, we can get a command and some text information
-    return command, info
+    if len(sys.argv) == 2:
+        command = sys.argv[1]
+        if command == '-clean_database':
+            return command, ''
+        else:
+            print usage
+            exit()
+    elif len(sys.argv) == 3:
+        command = sys.argv[1]
+        argument = sys.argv[2]
+        if command == '-schedule':
+            # if we get request from Internet, we can get a command and some
+            # text information
+            with open(argument, 'r') as f:
+                param = f.read()
+        else:
+            param = argument
+        return command, param
+
+    print usage
+    exit()
 
 
 # We will use command line to call QoS manager
@@ -45,18 +51,37 @@ def get_request():
 # ...
 
 if __name__ == '__main__':
+    print '=== QoS Manager ===\nDeveloped by Deyuan Guo and Chunkun Bo.\n'
 
     command, info = get_request()
+    print '[QoS Manager] Incoming request: ' + command
+    if info != '':
+        print 'Information:\n--------------------'
+        print info + '\n--------------------'
 
-    if command == '-new_spec':
-        container_list = call_scheduler(info, task='new')
-        if len(container_list) > 0:
-            add_spec_to_db(info)
-            update_mapping_in_db(info, container_list)
-            authorize(client_id, container_list)
-            exit_and_tell_client(container_address)
+    if command == '-schedule':
+        spec = itf_spec.QosSpec()
+        err = spec.parse_string(info)
+        if not err:
+            spec_db = itf_database.get_spec(spec.SpecId)
+            if spec_db == None:
+                print '[QoS Manager] Add and schedule new spec: ' + spec.SpecId
+                scheduled_containers, info = qos_scheduler.schedule(spec, task='new')
+            else:
+                print '[QoS Manager] Reschedule for spec: ' + spec.SpecId
+                scheduled_containers, info = qos_scheduler.schedule(spec, task='update')
+
+            if len(scheduled_containers) > 0:
+                add_spec_to_db(info)
+                update_mapping_in_db(info, scheduled_contaienrs)
+                authorize(client_id, scheduled_containers)
+                exit_and_tell_client(container_address)
+            else:
+                print '[QoS Manager] Fail to schedule new spec: ' + spec.SpecId + \
+                        ' [' + info + ']'
+                exit(-1)
         else:
-            exit_and_tell_client(fail)
+            print '[QoS Manager] Error: Invalid QoS spec.'
 
     elif command == '-update_spec':
         prev_container_list = get_container_list_in_db(spec)
@@ -87,6 +112,12 @@ if __name__ == '__main__':
         # this request is from system admin when creating new container
         monitor_container.insert(info)  # insert status to db
         exit()
+
+    elif command == '-clean_database':
+        print '[QoS Manager] Clearing all contents in the QoS database?'
+        prompt = raw_input('[y/n]:')
+        if prompt == 'y' or prompt == 'Y':
+            itf_database.clean()
 
     else:
         print 'Invalid command', command
