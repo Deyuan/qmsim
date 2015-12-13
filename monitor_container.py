@@ -26,14 +26,16 @@ def update(record):
                   ' (' + record.container_addr + ') not available.'
         # TODO: update database and reschedule
     else:
+        assert status_remote.ContainerId == record.container_id
         if status_in_db == None:
             print '[Container Monitor] Insert ' + record.container_id + ' status to database.'
-            # Default reserved size = 0
-            itf_database.update_container_status(record.container_id, status_remote)
+            # Default reserved size = used size
+            status_remote.StorageReserved = status_remote.StorageUsed
+            itf_database.update_container_status(status_remote)
         else:
             # Avoid overwriting the reservable size (container doesn't know this)
             status_remote.StorageReserved = status_in_db.StorageReserved
-            itf_database.update_container_status(record.container_id, status_remote)
+            itf_database.update_container_status(status_remote)
             # call QoS Monitor
             print '[Container Monitor] Call QoS Monitor for ' + record.container_id
             monitor_qos.monitor_container(record.container_id)
@@ -45,8 +47,9 @@ def insert(container_addr):
     added = itf_database.add_to_container_list(container_id, container_addr)
     if added == True:
         print '[Container Monitor] Insert ' + container_id + ' status to database.'
-        # Default reserved size = 0
-        itf_database.update_container_status(container_id, status_remote)
+        # Default reserved size = used size
+        status_remote.StorageReserved = status_remote.StorageUsed
+        itf_database.update_container_status(status_remote)
 
 
 # Container Monitor Mainloop

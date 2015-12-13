@@ -26,6 +26,9 @@ class ContainerRecord:
         self.container_id = info[0]
         self.container_addr = info[1]
 
+    def to_string(self):
+        return self.container_id + ', ' + self.container_addr
+
     def dump(self):
         print '[itf_database] Container: id=' + self.container_id \
                 + ' (addr:' + self.container_addr + ') [' \
@@ -41,6 +44,9 @@ class SpecRecord:
         if info == '':
             return False
         self.spec_id = info
+
+    def to_string(self):
+        return self.spec_id
 
     def dump(self):
         print '[itf_database] Spec:' + self.spec_id + ' [' \
@@ -60,6 +66,12 @@ class SpecToContainers:
         for i in range(1, len(info)):
             self.container_ids.append(info[i].strip())
 
+    def to_string(self):
+        string = self.spec_id
+        for container_id in self.container_ids:
+            string += ', ' + container_id
+        return string
+
     def dump(self):
         print '[itf_database] Spec: ' + self.spec_id + ' -> ' \
                 + str(self.container_ids)
@@ -78,6 +90,12 @@ class ContainerToSpecs:
         for i in range(1, len(info)):
             self.spec_ids.append(info[i].strip())
 
+    def to_string(self):
+        string = self.container_id
+        for spec_id in self.spec_ids:
+            string += ', ' + spec_id
+        return string
+
     def dump(self):
         print '[itf_database] Container: ' + self.container_id + ' -> ' \
                 + str(self.spec_ids)
@@ -85,9 +103,10 @@ class ContainerToSpecs:
 
 ##### DB READ #####
 
+# [container_list.txt]
 # Get the complete container list
 # Data entry: [container_id, container_addr, filename_in_db]
-def get_container_list():
+def get_container_record_list():
     # read and parse database/meta/container_list.txt
     container_list = []
     try:
@@ -103,17 +122,19 @@ def get_container_list():
         print '[itf_database] container_list.txt does not exist.'
     return container_list
 
+# [container_list.txt]
 # Get the complete container id list
 def get_container_id_list():
-    container_list = get_container_list()
+    container_list = get_container_record_list()
     container_id_list = []
     for record in container_list:
         container_id_list.append(record.container_id)
     return container_id_list
 
+# [spec_list.txt]
 # Get the complete spec list
 # Data entry: [spec_id, filename_in_db]
-def get_spec_list():
+def get_spec_record_list():
     # read and parse database/meta/spec_list.txt
     spec_list = []
     with open('database/meta/spec_list.txt', 'r') as f:
@@ -124,14 +145,16 @@ def get_spec_list():
                 spec_list.append(record)
     return spec_list
 
+# [spec_list.txt]
 # Get the complete spec id list
 def get_spec_id_list():
-    spec_list = get_spec_list()
+    spec_list = get_spec_record_list()
     spec_id_list = []
     for record in spec_list:
         spec_id_list.append(record.spec_id)
     return spec_id_list
 
+# [spec_to_container.txt]
 # Get the complete spec-to-container map
 def get_spec_to_container_map():
     s2c_map = []
@@ -143,6 +166,7 @@ def get_spec_to_container_map():
                 s2c_map.append(record)
     return s2c_map
 
+# [container_to_spec.txt]
 # Get the complete container-to-spec map
 def get_container_to_spec_map():
     c2s_map = []
@@ -154,6 +178,7 @@ def get_container_to_spec_map():
                 c2s_map.append(record)
     return c2s_map
 
+# [spec_to_container.txt]
 # Given a spec_id, return all related container_ids
 def get_container_ids_for_spec(spec_id):
     s2c_map = get_spec_to_container_map()
@@ -162,6 +187,7 @@ def get_container_ids_for_spec(spec_id):
             return entry.container_ids
     return []
 
+# [container_to_spec.txt]
 # Given a container_id, return all related spec_ids
 def get_spec_ids_on_container(container_id):
     c2s_map = get_container_to_spec_map()
@@ -170,6 +196,7 @@ def get_spec_ids_on_container(container_id):
             return entry.spec_ids
     return []
 
+# [container/]
 # Given a container_id, get container status
 def get_status(container_id):
     path = os.path.join('database/container/', container_id + '.txt')
@@ -182,6 +209,7 @@ def get_status(container_id):
     else:
         return None
 
+# [spec/]
 # Given a spec_id, get client qos spec
 def get_spec(spec_id):
     path = os.path.join('database/spec/', spec_id + '.txt')
@@ -196,10 +224,25 @@ def get_spec(spec_id):
 
 ##### DB WRITE #####
 
+# [container/]
+# Update the status file in db
+def update_container_status(new_status):
+    # caller should make sure that new_status.StorageReserved is updated
+    path = os.path.join('database/container/', new_status.ContainerId + '.txt')
+    new_status.write_to_file(path)
+
+# [spec/]
+# Update a spec in db
+def update_client_spec(new_spec):
+    # caller should make sure that new_spec.UsedSize is updated
+    path = os.path.join('database/spec/', new_spec.SpecId + '.txt')
+    new_spec.write_to_file(path)
+
+# [container_list.txt, container/]
 # Add a new container to the database
 def add_to_container_list(container_id, container_addr):
     # write to database/meta/container_list.txt
-    container_list = get_container_list()
+    container_list = get_container_record_list()
     for record in container_list:
         if record.container_id == container_id:
             print '[itf_database] Container ID ' + container_id \
@@ -213,38 +256,150 @@ def add_to_container_list(container_id, container_addr):
 
     string = ''
     for record in container_list:
-        string += record.container_id + ', ' + record.container_addr + '\n'
+        string += record.to_string() + '\n'
 
-    f = open('database/meta/container_list.txt', 'w')
-    f.write(string)
-    f.close()
+    with open('database/meta/container_list.txt', 'w') as f:
+        f.write(string)
 
     return True
 
+# [spec_to_container.txt, container_to_spec.txt, container/]
+# Algorithm:
+# 1. For a spec, compare existing containers and newly scheduled containers
+# 2. If the spec is no longer on a container, remove it in container_to_spec,
+#    and update the reserved size of the container
+# 3. If the spec is newly scheduled to a container, add it to the map, and
+#    update the reserved size of the container
+# 4. For reschedule, call 3rd-party file transfer for used storage.
+def update_map_for_spec(spec, new_container_ids):
+    # Use two dict to represent the two-way mapping
+    s2c_map = get_spec_to_container_map()
+    c2s_map = get_container_to_spec_map()
+    s2c_dict = {}
+    c2s_dict = {}
+    for record in s2c_map:
+        s2c_dict[record.spec_id] = record.container_ids
+    for record in c2s_map:
+        c2s_dict[record.container_id] = record.spec_ids
+
+    if spec.SpecId not in s2c_dict:
+        # No existing files, so only update the mapping and reserved size
+        s2c_dict[spec.SpecId] = new_container_ids
+        for container_id in new_container_ids:
+            # Add to container-to-spec map
+            if container_id not in c2s_dict:
+                c2s_dict[container_id] = spec.SpecId
+            else:
+                c2s_dict[container_id].append(spec.SpecId)
+            # Update container status
+            status = get_status(container_id)
+            status.StorageReserved += spec.ReservedSize
+            update_container_status(status)
+            print '[itf_database] Container {' + container_id \
+                    + '} reserved size increase ' + spec.ReservedSize + ' MB'
+    else:
+        old_container_ids = s2c_dict[spec.SpecId]
+        old_spec = get_spec(spec.SpecId)
+        copy_source_id = 0
+
+        for container_id in new_container_ids:
+            if container_id in old_container_ids:
+                # Assume file contents are not changed, only check reserved storage
+                status = get_status(container_id)
+                status.StorageReserved += spec.ReservedSize - old_spec.ReservedSize
+                update_container_status(status)
+                print '[itf_database] Container {' + container_id \
+                        + '} reserved size increase ' \
+                        + (spec.ReservedSize - old_spec.ReservedSize) + ' MB'
+            else:
+                # Add to container-to-spec map
+                if container_id not in c2s_dict:
+                    c2s_dict[container_id] = spec.SpecId
+                else:
+                    c2s_dict[container_id].append(spec.SpecId)
+
+                # Update container status
+                status = get_status(container_id)
+                status.StorageReserved += spec.ReservedSize
+                update_container_status(status)
+                print '[itf_database] Container {' + container_id \
+                        + '} reserved size increase ' + spec.ReservedSize + ' MB'
+
+                # 3rd-party file copy from old containers
+                print '[itf_database] 3rd-party file transfer from {' \
+                        + old_container_ids[copy_source_id] + '} to {' \
+                        + container_id + '} with ' + spec.UsedSize + ' MB'
+                copy_source_id = (copy_source_id + 1) % len(old_container_ids)
+
+        for container_id in old_container_ids:
+            if container_id not in new_contianer_ids:
+                # Remove spec from those containers
+                c2s_dict[container_id].remove(spec.SpecId)
+                if len(c2s_dict[container_id]) == 0:
+                    c2s_dict.pop(container_id, None)
+
+                # Update container status
+                status = get_status(container_id)
+                status.StorageReserved -= spec.ReservedSize
+                update_container_status(status)
+                print '[itf_database] Container {' + container_id \
+                        + '} reserved size increase -' + spec.ReservedSize + ' MB'
+
+    # Save to file
+    string = ''
+    for s_id in s2c_dict:
+        c_ids = s2c_dict[s_id]
+        string += s_id
+        for c_id in c_ids:
+            string += ', ' + c_id
+        string += '\n'
+    with open('database/meta/spec_to_container.txt', 'w'):
+        f.write(string)
+
+    string = ''
+    for c_id in c2s_dict:
+        s_ids = c2s_dict[c_id]
+        string += c_id
+        for s_id in s_ids:
+            string += ', ' + s_id
+        string += '\n'
+    with open('database/meta/container_to_spec.txt', 'w'):
+        f.write(string)
+
+
+# [spec_list.txt, spec_to_container.txt, container_to_spec.txt, spec/]
 # Add a new scheduled spec and containers into db
-def add_scheduled_spec(spec, containers):
-    # write spec_id and filename to database/meta/spec_list.txt
+def add_scheduled_spec(spec, new_container_ids):
+    # write spec_id to database/meta/spec_list.txt
+    rescheduled = False
+    spec_list = get_spec_record_list()
+    for record in spec_list:
+        if record.spec_id == spec.SpecId:
+            rescheduled = True
+            break
+    if not rescheduled:
+        record = SpecRecord()
+        record.spec_id = spec.SpecId
+        spec_list.append(record)
 
-    # save spec to a file
+        string = ''
+        for record in spec_list:
+            string += record.to_string() + '\n'
 
-    # update spec_to_container.txt
+        with open('database/meta/spec_list.txt', 'w') as f:
+            f.write(string)
 
-    # update container_to_spec.txt
+        print '[itf_database] Insert {' + spec.SpecId + '} to spec list'
 
-    # update container_list.txt for reservable size
-    return
+    # Update spec_to_container.txt and container_to_spec.txt
+    update_map_for_spec(spec, new_container_ids)
 
-# Update the status file in db
-def update_container_status(container_id, new_status):
-    # caller should make sure that new_status.StorageReserved is updated
-    path = os.path.join('database/container/', container_id + '.txt')
-    new_status.write_to_file(path)
+    # save spec to database/spec/
+    update_client_spec(spec)
+    print '[itf_database] Save spec to {database/spec/' + spec.SpecId + '.txt}'
 
-# Update a spec in db
-def update_client_spec(spec_id, new_spec):
-    # caller should make sure that new_spec.UsedSize is updated
-    path = os.path.join('database/spec/', spec_id + '.txt')
-    new_spec.write_to_file(path)
+
+##### DB MISC #####
 
 # Initialize the QoS database
 def init():
@@ -283,7 +438,7 @@ def clean():
 def summary(verbose):
     print '--------------------'
     print '[itf_database] Container list:'
-    container_list = get_container_list()
+    container_list = get_container_record_list()
     if len(container_list) == 0:
         print 'Empty'
     else:
@@ -295,7 +450,7 @@ def summary(verbose):
 
     print '--------------------'
     print '[itf_database] Spec list:'
-    spec_list = get_spec_list()
+    spec_list = get_spec_record_list()
     if len(spec_list) == 0:
         print 'Empty'
     else:

@@ -64,48 +64,34 @@ if __name__ == '__main__':
         err = spec.parse_string(info)
         if not err:
             spec_db = itf_database.get_spec(spec.SpecId)
-            if spec_db == None:
-                print '[QoS Manager] Add and schedule new spec: ' + spec.SpecId
+
+            if spec_db == None: # spec does not exist
+                print '[QoS Manager] Schedule for new spec {' + spec.SpecId + '}'
                 scheduled_containers, info = qos_scheduler.schedule(spec, task='new')
-            else:
-                print '[QoS Manager] Reschedule for spec: ' + spec.SpecId
+
+                if len(scheduled_containers) > 0:
+                    itf_database.add_scheduled_spec(spec, scheduled_containers)
+                    print '[QoS Manager] Successfully scheduled {' + spec.SpecId + '}'
+
+                else:
+                    print '[QoS Manager] Fail to schedule new spec {' \
+                            + spec.SpecId + '} {' + info + '}'
+                    exit(-1)
+
+            else: # reschedule for updated spec
+                print '[QoS Manager] Reschedule for spec {' + spec.SpecId + '}'
                 scheduled_containers, info = qos_scheduler.schedule(spec, task='update')
 
-            if len(scheduled_containers) > 0:
-                add_spec_to_db(info)
-                update_mapping_in_db(info, scheduled_contaienrs)
-                authorize(client_id, scheduled_containers)
-                exit_and_tell_client(container_address)
-            else:
-                print '[QoS Manager] Fail to schedule new spec: ' + spec.SpecId + \
-                        ' [' + info + ']'
-                exit(-1)
+                if len(scheduled_containers) > 0:
+                    itf_database.add_scheduled_spec(spec, scheduled_containers)
+                    print '[QoS Manager] Successfully rescheduled {' + spec.SpecId + '}'
+
+                else:
+                    print '[QoS Manager] Fail to reschedule spec {' \
+                            + spec.SpecId + '} {' + info + '}'
+                    exit(-1)
         else:
             print '[QoS Manager] Error: Invalid QoS spec.'
-
-    elif command == '-update_spec':
-        prev_container_list = get_container_list_in_db(spec)
-        container_list = call_scheduler(info, task='update')
-        if len(container_list) > 0:
-            update_spec_to_db(info)
-            update_mapping_in_db(info, container_list)
-            authorize(client_id, container_list)
-            exit_and_tell_client(container_address)
-            unauthorize(client_id, prev_container_list - container_list)
-        else:
-            exit_and_tell_client(fail)
-
-    elif command == '-reschedule':
-        prev_container_list = get_container_list_in_db(spec)
-        # this reschedule can from QoS monitor or from client-side
-        container_list = call_scheduler(info, task='reschedule')
-        if len(container_list) > 0:
-            update_mapping_in_db(info, container_list)
-            authorize(client_id, container_list)
-            exit_and_tell_client(container_address)
-            unauthorize(client_id, prev_container_list - container_list)
-        else:
-            exit_and_do_nothing() #?
 
     elif command == '-new_container':
         print '[QoS Manager] Add a new container: ' + info
@@ -128,5 +114,5 @@ if __name__ == '__main__':
             itf_database.clean()
 
     else:
-        print 'Invalid command', command
+        print 'Unsupported command: ', command
 
