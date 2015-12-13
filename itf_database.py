@@ -280,7 +280,7 @@ def clean():
     init()
 
 # Show the summary of the QoS database
-def summary():
+def summary(verbose):
     print '--------------------'
     print '[itf_database] Container list:'
     container_list = get_container_list()
@@ -289,7 +289,9 @@ def summary():
     else:
         for record in container_list:
             record.dump()
-            #status = get_status(record.container_id)
+            if verbose:
+                status = get_status(record.container_id)
+                print status.to_string()
 
     print '--------------------'
     print '[itf_database] Spec list:'
@@ -299,7 +301,9 @@ def summary():
     else:
         for record in spec_list:
             record.dump()
-            #spec = get_spec(record.spec_id)
+            if verbose:
+                spec = get_spec(record.spec_id)
+                print spec.to_string()
 
     print '--------------------'
     print '[itf_database] Container-to-spec mapping:'
@@ -319,6 +323,7 @@ def summary():
         for record in spec_map:
             record.dump()
 
+    print '--------------------'
 
 # Only for testing
 if __name__ == '__main__':

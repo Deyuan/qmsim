@@ -18,11 +18,13 @@ def get_request():
     usage += '    -schedule spec_file_path\n'
     usage += '    -new_container container_address\n'
     usage += '    -show_database\n'
+    usage += '    -show_database_verbose\n'
     usage += '    -clean_database\n'
 
     if len(sys.argv) == 2:
         command = sys.argv[1]
-        if command == '-show_database' or command == '-clean_database':
+        if command == '-show_database' or command == '-clean_database' \
+                or command == '-show_database_verbose':
             return command, ''
     elif len(sys.argv) == 3:
         command = sys.argv[1]
@@ -113,7 +115,11 @@ if __name__ == '__main__':
 
     elif command == '-show_database':
         print '[QoS Manager] QoS database summary:'
-        itf_database.summary()
+        itf_database.summary(verbose=False)
+
+    elif command == '-show_database_verbose':
+        print '[QoS Manager] QoS database summary:'
+        itf_database.summary(verbose=True)
 
     elif command == '-clean_database':
         print '[QoS Manager] Clearing all contents in the QoS database?'
