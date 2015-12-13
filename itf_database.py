@@ -288,7 +288,7 @@ def update_map_for_spec(spec, new_container_ids):
         for container_id in new_container_ids:
             # Add to container-to-spec map
             if container_id not in c2s_dict:
-                c2s_dict[container_id] = spec.SpecId
+                c2s_dict[container_id] = [spec.SpecId]
             else:
                 c2s_dict[container_id].append(spec.SpecId)
             # Update container status
@@ -296,7 +296,8 @@ def update_map_for_spec(spec, new_container_ids):
             status.StorageReserved += spec.ReservedSize
             update_container_status(status)
             print '[itf_database] Container {' + container_id \
-                    + '} reserved size increase ' + spec.ReservedSize + ' MB'
+                    + '} reserved size increase ' + str(spec.ReservedSize) \
+                    + ' MB'
     else:
         old_container_ids = s2c_dict[spec.SpecId]
         old_spec = get_spec(spec.SpecId)
@@ -310,11 +311,11 @@ def update_map_for_spec(spec, new_container_ids):
                 update_container_status(status)
                 print '[itf_database] Container {' + container_id \
                         + '} reserved size increase ' \
-                        + (spec.ReservedSize - old_spec.ReservedSize) + ' MB'
+                        + str(spec.ReservedSize - old_spec.ReservedSize) + ' MB'
             else:
                 # Add to container-to-spec map
                 if container_id not in c2s_dict:
-                    c2s_dict[container_id] = spec.SpecId
+                    c2s_dict[container_id] = [spec.SpecId]
                 else:
                     c2s_dict[container_id].append(spec.SpecId)
 
@@ -323,12 +324,13 @@ def update_map_for_spec(spec, new_container_ids):
                 status.StorageReserved += spec.ReservedSize
                 update_container_status(status)
                 print '[itf_database] Container {' + container_id \
-                        + '} reserved size increase ' + spec.ReservedSize + ' MB'
+                        + '} reserved size increase ' + str(spec.ReservedSize) \
+                        + ' MB'
 
                 # 3rd-party file copy from old containers
                 print '[itf_database] 3rd-party file transfer from {' \
                         + old_container_ids[copy_source_id] + '} to {' \
-                        + container_id + '} with ' + spec.UsedSize + ' MB'
+                        + container_id + '} with ' + str(spec.UsedSize) + ' MB'
                 copy_source_id = (copy_source_id + 1) % len(old_container_ids)
 
         for container_id in old_container_ids:
@@ -343,7 +345,8 @@ def update_map_for_spec(spec, new_container_ids):
                 status.StorageReserved -= spec.ReservedSize
                 update_container_status(status)
                 print '[itf_database] Container {' + container_id \
-                        + '} reserved size increase -' + spec.ReservedSize + ' MB'
+                        + '} reserved size increase -' \
+                        + str(spec.ReservedSize) + ' MB'
 
     # Save to file
     string = ''
@@ -353,7 +356,7 @@ def update_map_for_spec(spec, new_container_ids):
         for c_id in c_ids:
             string += ', ' + c_id
         string += '\n'
-    with open('database/meta/spec_to_container.txt', 'w'):
+    with open('database/meta/spec_to_container.txt', 'w') as f:
         f.write(string)
 
     string = ''
@@ -363,7 +366,7 @@ def update_map_for_spec(spec, new_container_ids):
         for s_id in s_ids:
             string += ', ' + s_id
         string += '\n'
-    with open('database/meta/container_to_spec.txt', 'w'):
+    with open('database/meta/container_to_spec.txt', 'w') as f:
         f.write(string)
 
 

@@ -56,7 +56,7 @@ def insert(container_addr):
 if __name__ == '__main__':
     print '[Container Monitor] Start monitoring...'
     while True:
-        records = itf_database.get_container_list()
+        records = itf_database.get_container_record_list()
         for record in records:
             print '--------------------'
             print '[Container Monitor] Check ' + record.container_id + \
