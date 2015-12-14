@@ -263,6 +263,16 @@ def add_to_container_list(container_id, container_addr):
 
     return True
 
+
+# Input a list of SpecRecord, save to spec_list.txt
+def save_spec_record_list(spec_record_list):
+    string = ''
+    for record in spec_record_list:
+        string += record.to_string() + '\n'
+    with open('database/meta/spec_list.txt', 'w') as f:
+        f.write(string)
+
+
 # [spec_to_container.txt, container_to_spec.txt, container/]
 # Algorithm:
 # 1. For a spec, compare existing containers and newly scheduled containers
@@ -384,14 +394,7 @@ def add_scheduled_spec(spec, new_container_ids):
         record = SpecRecord()
         record.spec_id = spec.SpecId
         spec_list.append(record)
-
-        string = ''
-        for record in spec_list:
-            string += record.to_string() + '\n'
-
-        with open('database/meta/spec_list.txt', 'w') as f:
-            f.write(string)
-
+        save_spec_record_list(spec_list)
         print '[itf_database] Insert {' + spec.SpecId + '} to spec list'
 
     # Update spec_to_container.txt and container_to_spec.txt
@@ -401,6 +404,68 @@ def add_scheduled_spec(spec, new_container_ids):
     update_client_spec(spec)
     print '[itf_database] Save spec to {database/spec/' + spec.SpecId + '.txt}'
 
+# [spec_list.txt, spec_to_container.txt, container_to_spec.txt, spec/]
+# Remove a spec from the database
+def remove_spec(spec_id):
+    spec = get_spec(spec_id)
+
+    # remove from spec_list.txt
+    spec_list = get_spec_record_list()
+    for record in spec_list:
+        if record.spec_id == spec_id:
+            spec_list.remove(record)
+    save_spec_record_list(spec_list)
+
+    # remove from spec_to_container.txt and container_to_spec.txt
+    # Use two dict to represent the two-way mapping
+    s2c_map = get_spec_to_container_map()
+    c2s_map = get_container_to_spec_map()
+    s2c_dict = {}
+    c2s_dict = {}
+    for record in s2c_map:
+        s2c_dict[record.spec_id] = record.container_ids
+    for record in c2s_map:
+        c2s_dict[record.container_id] = record.spec_ids
+
+    if spec_id in s2c_dict:
+        container_ids = s2c_dict[spec_id]
+        for container_id in container_ids:
+            status = get_status(container_id)
+            status.StorageReserved -= spec.ReservedSize
+            update_container_status(status)
+            print '[itf_database] Container {' + container_id \
+                    + '} reserved size decrease ' + str(spec.ReservedSize) \
+                    + ' MB'
+            c2s_dict[container_id].remove(spec_id)
+            if len(c2s_dict[container_id]) == 0:
+                c2s_dict.pop(container_id, None)
+        s2c_dict.pop(spec_id, None)
+
+        # Save to file
+        string = ''
+        for s_id in s2c_dict:
+            c_ids = s2c_dict[s_id]
+            string += s_id
+            for c_id in c_ids:
+                string += ', ' + c_id
+            string += '\n'
+        with open('database/meta/spec_to_container.txt', 'w') as f:
+            f.write(string)
+
+        string = ''
+        for c_id in c2s_dict:
+            s_ids = c2s_dict[c_id]
+            string += c_id
+            for s_id in s_ids:
+                string += ', ' + s_id
+            string += '\n'
+        with open('database/meta/container_to_spec.txt', 'w') as f:
+            f.write(string)
+
+    # remove the spec file in spec/
+    spec_path = os.path.join('database/spec/', spec_id + '.txt')
+    if os.path.isfile(spec_path):
+        os.remove(spec_path)
 
 ##### DB MISC #####
 

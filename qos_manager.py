@@ -16,27 +16,23 @@ def get_request():
     usage = 'Usage: python qos_manager.py -command argument\n'
     usage += 'Commands:\n'
     usage += '    -schedule spec_file_path\n'
-    usage += '    -new_container container_address\n'
-    usage += '    -show_database\n'
-    usage += '    -show_database_verbose\n'
-    usage += '    -clean_database\n'
+    usage += '    -rm_spec spec_id\n'
+    usage += '    -add_container container_address\n'
+    usage += '    -show_db\n'
+    usage += '    -show_db_verbose\n'
+    usage += '    -destory_db\n'
 
     if len(sys.argv) == 2:
-        command = sys.argv[1]
-        if command == '-show_database' or command == '-clean_database' \
-                or command == '-show_database_verbose':
-            return command, ''
+        return sys.argv[1], ''
     elif len(sys.argv) == 3:
-        command = sys.argv[1]
-        argument = sys.argv[2]
-        if command == '-schedule':
+        if sys.argv[1] == '-schedule':
             # if we get request from Internet, we can get a command and some
             # text information
-            with open(argument, 'r') as f:
-                param = f.read()
+            with open(sys.argv[2], 'r') as f:
+                info = f.read()
         else:
-            param = argument
-        return command, param
+            info = sys.argv[2]
+        return sys.argv[1], info
 
     print '=== QoS Manager ===\nDeveloped by Deyuan Guo and Chunkun Bo.\n'
     print usage
@@ -54,6 +50,7 @@ def get_request():
 if __name__ == '__main__':
     command, info = get_request()
 
+    print '################################################################################'
     print '[QoS Manager] Incoming request: ' + command
     if info != '':
         print 'Information:\n--------------------'
@@ -93,21 +90,25 @@ if __name__ == '__main__':
         else:
             print '[QoS Manager] Error: Invalid QoS spec.'
 
-    elif command == '-new_container':
+    elif command == '-rm_spec':
+        spec_id = info
+        print '[QoS Manager] Remove spec {' + spec_id + '} from database'
+        itf_database.remove_spec(spec_id)
+
+    elif command == '-add_container':
         print '[QoS Manager] Add a new container: ' + info
         # this request is from system admin when creating new container
         monitor_container.insert(info)  # insert status to db
-        exit()
 
-    elif command == '-show_database':
+    elif command == '-show_db':
         print '[QoS Manager] QoS database summary:'
         itf_database.summary(verbose=False)
 
-    elif command == '-show_database_verbose':
+    elif command == '-show_db_verbose':
         print '[QoS Manager] QoS database summary:'
         itf_database.summary(verbose=True)
 
-    elif command == '-clean_database':
+    elif command == '-destory_db':
         print '[QoS Manager] Clearing all contents in the QoS database?'
         prompt = raw_input('[y/n]:')
         if prompt == 'y' or prompt == 'Y':
