@@ -4,6 +4,7 @@
 # Date: Dec 10, 2015
 
 import sys
+import os
 import monitor_container
 import qos_scheduler
 import itf_spec
@@ -15,7 +16,7 @@ import itf_database
 def get_request():
     usage = 'Usage: python qos_manager.py -command argument\n'
     usage += 'Commands:\n'
-    usage += '    -schedule spec_file_path\n'
+    usage += '    -schedule [spec_file_path or spec_id]\n'
     usage += '    -rm_spec spec_id\n'
     usage += '    -add_container container_address\n'
     usage += '    -show_db\n'
@@ -28,8 +29,19 @@ def get_request():
         if sys.argv[1] == '-schedule':
             # if we get request from Internet, we can get a command and some
             # text information
-            with open(sys.argv[2], 'r') as f:
-                info = f.read()
+            # For new spec, we need to input the spec file path;
+            # For updated spec, we only need to input the spec_id
+            if os.path.isfile(sys.argv[2]):
+                with open(sys.argv[2], 'r') as f:
+                    info = f.read()
+            else:
+                spec_id = sys.argv[2]
+                spec = itf_database.get_spec(spec_id)
+                if spec != None:
+                    info = spec.to_string()
+                else:
+                    info = ''
+                    print '[QoS Manager] Unrecognized spec ID: ' + spec_id
         else:
             info = sys.argv[2]
         return sys.argv[1], info

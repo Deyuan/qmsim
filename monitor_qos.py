@@ -3,8 +3,10 @@
 # Author: Deyuan Guo, Chunkun Bo
 # Date: Dec 9, 2015
 
+import subprocess
 import qos_checker
 import itf_database
+import itf_spec
 
 
 # Monitor a QoS spec
@@ -14,8 +16,10 @@ def monitor_spec(spec_id):
     satisfied = qos_checker.check_satisfiability(spec_id, container_id_list)
     if not satisfied:
         print '[QoS Monitor] Reschedule for unsatisfied spec: ' + spec_id
-        #TODO: call qos manager:
-        # qos_manager -reschedule spec_path_in_db
+        # Call qos manager:
+        subprocess.Popen( \
+            ["python", "qos_manager.py", "-schedule", spec_id] \
+            )
 
 # Monitor QoS specs related to a container
 def monitor_container(container_id):

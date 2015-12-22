@@ -19,6 +19,8 @@ class QosSpec:
 
     # Parse spec from a string
     def parse_string(self, spec_string):
+        if spec_string == '':
+            return -1
         spec = spec_string.splitlines()
         for line in spec:
             info = line.split('#')[0].split(',')
@@ -57,6 +59,8 @@ class QosSpec:
                     self.PhysicalLocation.append(info[i].strip())
             else:
                 print '[itf_spec] Warning: Cannot parse: ' + line
+                return -1;
+        return 0
 
     # Read spec from a file
     def read_from_file(self, path):

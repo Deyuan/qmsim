@@ -28,6 +28,8 @@ class ContainerStatus:
 
     # Parse status from a string
     def parse_string(self, status_string):
+        if status_string == '':
+            return -1;
         status = status_string.splitlines()
         for line in status:
             info = line.split('#')[0].split(',')
@@ -75,6 +77,8 @@ class ContainerStatus:
                 self.PhysicalLocation = val
             else:
                 print '[itf_status] Warning: Cannot parse: ' + line
+                return -1;
+        return 0
 
     # Read status from a file
     def read_from_file(self, path):
