@@ -3,28 +3,55 @@
 # Date: Dec 9, 2015
 
 class ContainerStatus:
-    def __init__(self):
-        self.ContainerId = ''           # (str) a unique string
-        # static information
-        self.StorageTotal = 0           # (int) MB
-        self.PathToSwitch = ''          # (str) path, may be multiple switches
-        self.CoresAvailable = 0         # (int) for concurrency available
-        self.StorageRBW = 0.0           # (flt) max MB/s
-        self.StorageWBW = 0.0           # (flt) max MB/s
-        self.StorageRLatency = 0        # (int) min uSec
-        self.StorageWLatency = 0        # (int) min uSec
-        self.StorageRAIDLevel = 0       # (int) range 0..6
-        self.CostPerGBMonth = 0.0       # (flt) allocation units
-        self.DataIntegrity = 0          # (int) range 0 to 10**6, 0 is worst
-        # dynamic information
-        self.StorageReserved = 0        # (int) MB - containers don't know this
-        self.StorageUsed = 0            # (int) MB
-        self.StorageReliability = 99    # (int) an integer with a presumed leading 0
-        self.ContainerAvailability = 99 # (int) an integer with a presumed leading 0
-        self.StorageRBW_dyn = 0         # (flt) MB/s. e.g. average bw of past 10 minutes
-        self.StorageWBW_dyn = 0         # (flt) MB/s. e.g. average bw of past 10 minutes
-        # extra information
-        self.PhysicalLocation = ''      # (str) hierarchical phisical location
+    def __init__(self, status_tuple=None):
+        if status_tuple is None:
+            self.ContainerId = ''           # (str) a unique string
+            # static information
+            self.StorageTotal = 0           # (int) MB
+            self.PathToSwitch = ''          # (str) path, may be multiple switches
+            self.CoresAvailable = 0         # (int) for concurrency available
+            self.StorageRBW = 0.0           # (flt) max MB/s
+            self.StorageWBW = 0.0           # (flt) max MB/s
+            self.StorageRLatency = 0        # (int) min uSec
+            self.StorageWLatency = 0        # (int) min uSec
+            self.StorageRAIDLevel = 0       # (int) range 0..6
+            self.CostPerGBMonth = 0.0       # (flt) allocation units
+            self.DataIntegrity = 0          # (int) range 0 to 10**6, 0 is worst
+            # dynamic information
+            self.StorageReserved = 0        # (int) MB - containers don't know this
+            self.StorageUsed = 0            # (int) MB
+            self.StorageReliability = 0     # (int) an integer with a presumed leading 0
+            self.ContainerAvailability = 0  # (int) an integer with a presumed leading 0
+            self.StorageRBW_dyn = 0.0       # (flt) MB/s. e.g. average bw of past 10 minutes
+            self.StorageWBW_dyn = 0.0       # (flt) MB/s. e.g. average bw of past 10 minutes
+            # extra information
+            self.PhysicalLocation = ''      # (str) hierarchical phisical location
+            self.NetworkAddress = ''        # (str)
+        else:
+            self.ContainerId, \
+            self.StorageTotal, \
+            self.PathToSwitch, \
+            self.CoresAvailable, \
+            self.StorageRBW, \
+            self.StorageWBW, \
+            self.StorageRLatency, \
+            self.StorageWLatency, \
+            self.StorageRAIDLevel, \
+            self.CostPerGBMonth, \
+            self.DataIntegrity, \
+            self.StorageReserved, \
+            self.StorageUsed, \
+            self.StorageReliability, \
+            self.ContainerAvailability, \
+            self.StorageRBW_dyn, \
+            self.StorageWBW_dyn, \
+            self.PhysicalLocation, \
+            self.NetworkAddress = status_tuple
+            # convert unicode string into regular string
+            self.ContainerId = str(self.ContainerId)
+            self.PathToSwitch = str(self.PathToSwitch)
+            self.PhysicalLocation = str(self.PhysicalLocation)
+            self.NetworkAddress = str(self.NetworkAddress)
 
     # Parse status from a string
     def parse_string(self, status_string):
@@ -75,6 +102,8 @@ class ContainerStatus:
                 self.StorageWBW_dyn = float(val)
             elif key == 'PhysicalLocation':
                 self.PhysicalLocation = val
+            elif key == 'NetworkAddress':
+                self.NetworkAddress = val
             else:
                 print '[itf_status] Warning: Cannot parse: ' + line
                 return -1;
@@ -112,7 +141,8 @@ class ContainerStatus:
             + 'ContainerAvailability'+ ', ' + str(self.ContainerAvailability) + '\n' \
             + 'StorageRBW_dyn'       + ', ' + str(self.StorageRBW_dyn       ) + '\t# MB/s\n' \
             + 'StorageWBW_dyn'       + ', ' + str(self.StorageWBW_dyn       ) + '\t# MB/s\n' \
-            + 'PhysicalLocation'     + ', ' + str(self.PhysicalLocation     ) + '\n'
+            + 'PhysicalLocation'     + ', ' + str(self.PhysicalLocation     ) + '\n' \
+            + 'NetworkAddress'       + ', ' + str(self.NetworkAddress       ) + '\n'
         return status
 
     # Write status to a file
@@ -126,6 +156,54 @@ class ContainerStatus:
         except:
             print '[itf_status] Error: Cannot write to ' + path
             return False
+
+    # Generate a tuple for inserting to SQLite database
+    def to_tuple(self):
+        return (self.ContainerId          ,
+                self.StorageTotal         ,
+                self.PathToSwitch         ,
+                self.CoresAvailable       ,
+                self.StorageRBW           ,
+                self.StorageWBW           ,
+                self.StorageRLatency      ,
+                self.StorageWLatency      ,
+                self.StorageRAIDLevel     ,
+                self.CostPerGBMonth       ,
+                self.DataIntegrity        ,
+                self.StorageReserved      ,
+                self.StorageUsed          ,
+                self.StorageReliability   ,
+                self.ContainerAvailability,
+                self.StorageRBW_dyn       ,
+                self.StorageWBW_dyn       ,
+                self.PhysicalLocation     ,
+                self.NetworkAddress       )
+
+
+# A string for creating the container status table in SQLite database
+def get_sql_header():
+    header = " Containers(" + \
+             "ContainerId"           + " TEXT PRIMARY KEY UNIQUE," + \
+             "StorageTotal"          + " INT ," + \
+             "PathToSwitch"          + " TEXT," + \
+             "CoresAvailable"        + " INT ," + \
+             "StorageRBW"            + " REAL," + \
+             "StorageWBW"            + " REAL," + \
+             "StorageRLatency"       + " INT ," + \
+             "StorageWLatency"       + " INT ," + \
+             "StorageRAIDLevel"      + " INT ," + \
+             "CostPerGBMonth"        + " REAL," + \
+             "DataIntegrity"         + " INT ," + \
+             "StorageReserved"       + " INT ," + \
+             "StorageUsed"           + " INT ," + \
+             "StorageReliability"    + " INT ," + \
+             "ContainerAvailability" + " INT ," + \
+             "StorageRBW_dyn"        + " REAL," + \
+             "StorageWBW_dyn"        + " REAL," + \
+             "PhysicalLocation"      + " TEXT," + \
+             "NetworkAddress"        + " TEXT" + \
+             ");"
+    return header
 
 # Testing
 if __name__ == '__main__':

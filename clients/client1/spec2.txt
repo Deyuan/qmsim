@@ -7,4 +7,4 @@ UsedSize, 0	# MB
 DataIntegrity, 1	# 0:worst
 Bandwidth, Low	# High or Low
 Latency, Low	# High or Low
-PhysicalLocation, /usa/virginia/uva/cs, /usa/california/ucb/cs
+PhysicalLocations, /usa/virginia/uva/cs; /usa/california/ucb/cs

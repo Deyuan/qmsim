@@ -7,4 +7,4 @@ UsedSize, 0	# MB
 DataIntegrity, 0	# 0:worst
 Bandwidth, Low	# High or Low
 Latency, High	# High or Low
-PhysicalLocation, /usa/virginia/uva/cs
+PhysicalLocations, /usa/virginia/uva/cs

@@ -43,13 +43,15 @@ def update(record):
 # Insert a new container status to database, called by QoS Manager
 def insert(container_addr):
     status_remote = get_container_status(container_addr)
-    container_id = status_remote.ContainerId
-    added = itf_database.add_to_container_list(container_id, container_addr)
-    if added == True:
-        print '[Container Monitor] Insert ' + container_id + ' status to database.'
-        # Default reserved size = used size
+    if status_remote is not None:
+        container_id = status_remote.ContainerId
+        status_remote.NetworkAddress = container_addr
+        # Initial reserved size = used size
         status_remote.StorageReserved = status_remote.StorageUsed
-        itf_database.update_container_status(status_remote)
+        added = itf_database.update_container(status_remote, init=True)
+    else:
+        print "[Container Monitor] Container address " + container_addr + \
+                " is not available"
 
 
 # Container Monitor Mainloop

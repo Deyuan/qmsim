@@ -21,7 +21,7 @@ def get_request():
     usage += '    -add_container container_address\n'
     usage += '    -show_db\n'
     usage += '    -show_db_verbose\n'
-    usage += '    -destory_db\n'
+    usage += '    -destroy_db\n'
 
     if len(sys.argv) == 2:
         return sys.argv[1], ''
@@ -79,7 +79,7 @@ if __name__ == '__main__':
                 scheduled_containers, info = qos_scheduler.schedule(spec, task='new')
 
                 if len(scheduled_containers) > 0:
-                    itf_database.add_scheduled_spec(spec, scheduled_containers)
+                    itf_database.add_scheduled_spec(spec, scheduled_containers, init=True)
                     print '[QoS Manager] Successfully scheduled {' + spec.SpecId + '}'
 
                 else:
@@ -120,11 +120,11 @@ if __name__ == '__main__':
         print '[QoS Manager] QoS database summary:'
         itf_database.summary(verbose=True)
 
-    elif command == '-destory_db':
+    elif command == '-destroy_db':
         print '[QoS Manager] Clearing all contents in the QoS database?'
         prompt = raw_input('[y/n]:')
         if prompt == 'y' or prompt == 'Y':
-            itf_database.clean()
+            itf_database.init()
 
     else:
         print 'Unsupported command: ', command

@@ -3,19 +3,35 @@
 # Date: Dec 9, 2015
 
 class QosSpec:
-    def __init__(self):
-        self.SpecId = ''           # (str) a unique string
-        # hard requirements
-        self.Availability = 99     # (int) an integer with a presumed leading 0
-        self.Reliability = 90      # (int) an integer with a presumed leading 0
-        self.ReservedSize = 0      # (int) MB
-        self.UsedSize = 0          # (int) MB
-        self.DataIntegrity = 0     # (int) range 0 to 10**6, 0 is worst
-        # flexible requirements
-        self.Bandwidth = 'Low'     # (str) 'High' or 'Low'
-        self.Latency = 'High'      # (str) 'High' or 'Low'
-        # extra information
-        self.PhysicalLocation = '' # (str) hierarchical phisical location
+    def __init__(self, spec_tuple=None):
+        if spec_tuple is None:
+            self.SpecId = ''           # (str) a unique string
+            # hard requirements
+            self.Availability = 99     # (int) an integer with a presumed leading 0
+            self.Reliability = 99      # (int) an integer with a presumed leading 0
+            self.ReservedSize = 100    # (int) MB
+            self.UsedSize = 0          # (int) MB
+            self.DataIntegrity = 0     # (int) range 0 to 10**6, 0 is worst
+            # flexible requirements
+            self.Bandwidth = 'Low'     # (str) 'High' or 'Low'
+            self.Latency = 'High'      # (str) 'High' or 'Low'
+            # extra information
+            self.PhysicalLocations = '' # (str) locations separated by ;
+        else:
+            self.SpecId, \
+            self.Availability, \
+            self.Reliability, \
+            self.ReservedSize, \
+            self.UsedSize, \
+            self.DataIntegrity, \
+            self.Bandwidth, \
+            self.Latency, \
+            self.PhysicalLocations = spec_tuple
+            # convert unicode string into regular string
+            self.SpecId = str(self.SpecId)
+            self.Bandwidth = str(self.Bandwidth)
+            self.Latency = str(self.Latency)
+            self.PhysicalLocations = str(self.PhysicalLocations)
 
     # Parse spec from a string
     def parse_string(self, spec_string):
@@ -52,11 +68,9 @@ class QosSpec:
                     self.Latency = 'High'
                 else:
                     self.Latency = 'Low'
-            elif key == 'PhysicalLocation':
-                # a list of locaiton separated by ','
-                self.PhysicalLocation = []
-                for i in range(1, len(info)):
-                    self.PhysicalLocation.append(info[i].strip())
+            elif key == 'PhysicalLocations':
+                # a list of locaiton separated by ';'
+                self.PhysicalLocations = val
             else:
                 print '[itf_spec] Warning: Cannot parse: ' + line
                 return -1;
@@ -85,18 +99,20 @@ class QosSpec:
              + 'DataIntegrity' + ', ' + str(self.DataIntegrity) + '\t# 0:worst\n' \
              + 'Bandwidth'     + ', ' + str(self.Bandwidth    ) + '\t# High or Low\n' \
              + 'Latency'       + ', ' + str(self.Latency      ) + '\t# High or Low\n' \
-             + 'PhysicalLocation'
-        if len(self.PhysicalLocation) == 0:
-            spec += ', '
-        else:
-            for s in self.PhysicalLocation:
-                spec += ', ' + s
-        spec += '\n'
+             + 'PhysicalLocations' + ',' + str(self.PhysicalLocations) + '\n'
         return spec
+
+    # Get physical location list
+    def get_locations(self):
+        locations = []
+        loc_str = self.PhysicalLocations
+        loc_list = loc_str.split(';')
+        for loc in loc_list:
+            locations.append(loc.strip())
+        return locations
 
     # Write spec to a file
     def write_to_file(self, path):
-        # TODO: atomic and file lock
         try:
             with open(path, 'w') as f:
                 spec = self.to_string()
@@ -105,6 +121,34 @@ class QosSpec:
         except:
             print '[QoS Spec] Error: Cannot write to ' + path
             return False
+
+    # Generate a tuple for inserting to SQLite database
+    def to_tuple(self):
+        return (self.SpecId       ,
+                self.Availability ,
+                self.Reliability  ,
+                self.ReservedSize ,
+                self.UsedSize     ,
+                self.DataIntegrity,
+                self.Bandwidth    ,
+                self.Latency      ,
+                self.PhysicalLocations)
+
+
+# A string for creating the specification table in sqlite
+def get_sql_header():
+    header = " Specifications(" + \
+             "SpecId            TEXT PRIMARY KEY UNIQUE," + \
+             "Availability      INT," + \
+             "Reliability       INT," + \
+             "ReservedSize      INT," + \
+             "UsedSize          INT," + \
+             "DataIntegrity     INT," + \
+             "Bandwidth         TEXT," + \
+             "Latency           TEXT," + \
+             "PhysicalLocations TEXT" + \
+             ");"
+    return header
 
 # Testing
 if __name__ == '__main__':
