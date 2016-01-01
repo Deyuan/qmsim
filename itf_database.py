@@ -220,6 +220,30 @@ def remove_spec(spec_id):
         return True
     return False
 
+# Remove a container from the SQLite database
+def remove_container(container_id):
+    con = lite.connect(QOS_DB)
+    with con:
+        cur = con.cursor()
+        cur.execute("SELECT * FROM Containers WHERE ContainerId = ?", \
+                (container_id,))
+        data = cur.fetchone()
+        if data is not None:
+            # Check related specs - should be None
+            cur.execute("SELECT * FROM Relationships WHERE ContainerId = ?", \
+                        (container_id,))
+            data = cur.fetchone()
+            if data is not None:
+                print "[itf_database] Error: specifications on container " + \
+                        container_id + " are not rescheduled."
+                return False
+
+            # Delete entry in Containers table
+            cur.execute("DELETE FROM Containers WHERE ContainerId = ?", \
+                    (container_id,))
+        return True
+    return False
+
 # Given a spec_id, return all related container_ids
 def get_container_ids_for_spec(spec_id):
     container_ids = []

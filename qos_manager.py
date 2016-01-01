@@ -160,9 +160,43 @@ def process_request(request):
         itf_database.remove_spec(spec_id)
 
     elif cmd == '-add_container':
-        print '[QoS Manager] Add a new container: ' + data
+        # data is container address
+        print '[QoS Manager] Add a new container on address: ' + data
         # this request is from system admin when creating new container
         monitor_container.insert(data)  # insert status to db
+
+    elif cmd == '-rm_container':
+        container_id = data
+        print '[QoS Manager] Remove container id: ' + container_id
+        # Set container availability to 0 for triggering reschedule
+        status = itf_database.get_status(container_id)
+        if status is not None:
+            status.ContainerAvailability = 0
+            itf_database.update_container(status)
+
+            # Reschedule every related spec - finally no spec will be on container
+            related_specs = itf_database.get_spec_ids_on_container(container_id)
+            for spec_id in related_specs:
+                print '[QoS Manager] Reschedule for spec {' + spec_id + '}'
+                spec = itf_database.get_spec(spec_id)
+                scheduled_containers, data = qos_scheduler.schedule(spec, task='new')
+
+                if len(scheduled_containers) > 0:
+                    itf_database.add_scheduled_spec(spec, scheduled_containers)
+                    print '[QoS Manager] Successfully rescheduled {' + spec_id + '}'
+
+                else:
+                    print '[QoS Manager] Fail to reschedule spec {' \
+                                + spec_id + '} {' + data + '}'
+                    exit(-1)
+
+            # Delete container in database
+            # NOTE: Must after finishing the file copy
+            succ = itf_database.remove_container(container_id)
+            if succ:
+                print '[QoS Manager] Container', container_id, 'is removed from database'
+        else:
+            print '[QoS Manager] Container', container_id, 'is not in database'
 
     elif cmd == '-show_db':
         print '[QoS Manager] QoS database summary:'
@@ -191,16 +225,6 @@ def process_request(request):
         else:
             return 1 # use this value for stop the server main loop
 
-    elif cmd == '-test_server':
-        print 'send -show_db'
-        request = QosRequest()
-        request.cmd = '-show_db'
-        client_send(request)
-        print 'send -show_db_verbose'
-        request = QosRequest()
-        request.cmd = '-show_db_verbose'
-        client_send(request)
-
     else:
         print '[QoS Manager] Unsupported QoS request command: ', cmd
         return -1
@@ -211,5 +235,12 @@ def process_request(request):
 # QoS Manager Command Line Main Entry
 if __name__ == '__main__':
     request = get_request_cmdline()
-    process_request(request)
+
+    test_server = False
+    if test_server:
+        # send to QoS server
+        client_send(request)
+    else:
+        # process local
+        process_request(request)
 
