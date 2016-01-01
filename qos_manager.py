@@ -5,11 +5,14 @@
 
 import sys
 import os
+import socket
+import errno
 import monitor_container
 import qos_scheduler
 import itf_spec
 import itf_database
 
+QOS_SERVER_ADDR = ('localhost', 20000)
 
 # Define a class for QoS requests
 class QosRequest:
@@ -29,13 +32,8 @@ def print_help():
     usage += '    -show_db\n'
     usage += '    -show_db_verbose\n'
     usage += '    -destroy_db\n'
+    usage += '    -start_server\n'
     print usage
-
-def get_request_socket():
-    print "get request from socket"
-    request = QosRequest()
-    request.from_cmdline = False
-    return request
 
 def get_request_cmdline():
     if len(sys.argv) == 1:
@@ -59,24 +57,63 @@ def get_request_cmdline():
                 if spec is not None:
                     request.data = spec.to_string()
                 else:
-                    print '[QoS Manager] Unrecognized spec ID: ' + spec_id
+                    print '[QoS Manager] Unrecognized spec ID: ', spec_id
                     request.cmd = ''
                     request.data = ''
     return request
 
+
 # Main loop for QoS Server
 def qos_server_main():
-    print '[QoS Manager] QoS service started.'
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(QOS_SERVER_ADDR)
+    print '[QoS Server] Starting QoS server on %s port %s.' % QOS_SERVER_ADDR
+    sock.listen(1)
     err = 0
     while err != 1:
-        request = get_request_socket()
-        err = process_request(request)
+        connection, client_addr = sock.accept()
+        try:
+            print '######################################################################'
+            print '[QoS Server] Client connected: ', client_addr
+            while True:
+                data = connection.recv(1000)
+                print '[QoS Server] Received request: ', data
+                if data:
+                    connection.sendall(data)
+                    r = data.split(':::')
+                    request = QosRequest()
+                    request.from_cmdline = False
+                    request.cmd = r[0].strip()
+                    if len(r) > 1:
+                        request.data = r[1]
+                    err = process_request(request)
+                    if err == 1:
+                        break # stop the server
+                else:
+                    break;
+        except socket.error as e:
+            if e.errno != errno.ECONNRESET:
+                raise
+            pass
+        finally:
+            connection.close()
 
-# Process all incoming QoS requests
+
+# Client code for sending a request to the QoS Server
+def client_send(request):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.connect(QOS_SERVER_ADDR)
+    try:
+        message = request.cmd + ":::" + request.data
+        sock.sendall(message)
+    finally:
+        sock.close()
+
+
+# Process an incoming QoS request
 def process_request(request):
     cmd = request.cmd
     data = request.data
-    print '################################################################################'
     print '[QoS Manager] Incoming request: ' + cmd + ' from ' + \
             ('cmdline' if request.from_cmdline else 'socket')
     if data != '':
@@ -141,13 +178,28 @@ def process_request(request):
         if prompt == 'y' or prompt == 'Y':
             itf_database.init()
 
-    elif cmd == '-start_qos_server': # cmd line only
+    elif cmd == '-start_server':
         if request.from_cmdline:
             qos_server_main()
 
-    elif cmd == '-stop_qos_server': # socket only
-        if not request.from_cmdline:
+    elif cmd == '-stop_server':
+        if request.from_cmdline:
+            # send a stop request to server
+            request = QosRequest()
+            request.cmd = '-stop_server'
+            client_send(request)
+        else:
             return 1 # use this value for stop the server main loop
+
+    elif cmd == '-test_server':
+        print 'send -show_db'
+        request = QosRequest()
+        request.cmd = '-show_db'
+        client_send(request)
+        print 'send -show_db_verbose'
+        request = QosRequest()
+        request.cmd = '-show_db_verbose'
+        client_send(request)
 
     else:
         print '[QoS Manager] Unsupported QoS request command: ', cmd

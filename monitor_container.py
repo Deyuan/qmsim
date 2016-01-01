@@ -14,8 +14,11 @@ import monitor_qos
 def get_container_status(container_addr):
     path = os.path.join(container_addr, 'status.txt')
     status = itf_status.ContainerStatus()
-    status.read_from_file(path)
-    return status
+    succ = status.read_from_file(path)
+    if succ:
+        return status
+    else:
+        return None
 
 # update a container information
 def update(record):
