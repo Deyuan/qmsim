@@ -26,7 +26,8 @@ class ContainerStatus:
             self.StorageWBW_dyn = 0.0       # (flt) MB/s. e.g. average bw of past 10 minutes
             # extra information
             self.PhysicalLocation = ''      # (str) hierarchical phisical location
-            self.NetworkAddress = ''        # (str)
+            self.NetworkAddress = ''        # (str) grid path of the container
+            self.StatusPath = ''            # (str) grid path of the status file
         else:
             self.ContainerId, \
             self.StorageTotal, \
@@ -46,12 +47,14 @@ class ContainerStatus:
             self.StorageRBW_dyn, \
             self.StorageWBW_dyn, \
             self.PhysicalLocation, \
-            self.NetworkAddress = status_tuple
+            self.NetworkAddress, \
+            self.StatusPath = status_tuple
             # convert unicode string into regular string
             self.ContainerId = str(self.ContainerId)
             self.PathToSwitch = str(self.PathToSwitch)
             self.PhysicalLocation = str(self.PhysicalLocation)
             self.NetworkAddress = str(self.NetworkAddress)
+            self.StatusPath = str(self.StatusPath)
 
     # Parse status from a string
     def parse_string(self, status_string):
@@ -104,6 +107,8 @@ class ContainerStatus:
                 self.PhysicalLocation = val
             elif key == 'NetworkAddress':
                 self.NetworkAddress = val
+            elif key == 'StatusPath':
+                self.StatusPath = val
             else:
                 print '[itf_status] Warning: Cannot parse: ' + line
                 return -1;
@@ -142,7 +147,8 @@ class ContainerStatus:
             + 'StorageRBW_dyn'       + ', ' + str(self.StorageRBW_dyn       ) + '\t# MB/s\n' \
             + 'StorageWBW_dyn'       + ', ' + str(self.StorageWBW_dyn       ) + '\t# MB/s\n' \
             + 'PhysicalLocation'     + ', ' + str(self.PhysicalLocation     ) + '\n' \
-            + 'NetworkAddress'       + ', ' + str(self.NetworkAddress       ) + '\n'
+            + 'NetworkAddress'       + ', ' + str(self.NetworkAddress       ) + '\n' \
+            + 'StatusPath'           + ', ' + str(self.StatusPath           ) + '\n'
         return status
 
     # Write status to a file
@@ -177,7 +183,8 @@ class ContainerStatus:
                 self.StorageRBW_dyn       ,
                 self.StorageWBW_dyn       ,
                 self.PhysicalLocation     ,
-                self.NetworkAddress       )
+                self.NetworkAddress       ,
+                self.StatusPath           )
 
 
 # A string for creating the container status table in SQLite database
@@ -201,7 +208,8 @@ def get_sql_header():
              "StorageRBW_dyn"        + " REAL," + \
              "StorageWBW_dyn"        + " REAL," + \
              "PhysicalLocation"      + " TEXT," + \
-             "NetworkAddress"        + " TEXT" + \
+             "NetworkAddress"        + " TEXT," + \
+             "StatusPath"            + " TEXT" + \
              ");"
     return header
 

@@ -28,7 +28,8 @@ def print_help():
     usage += 'Commands:\n'
     usage += '    -schedule [spec_file_path or spec_id]\n'
     usage += '    -rm_spec spec_id\n'
-    usage += '    -add_container container_address\n'
+    usage += '    -add_container grid_path_to_status_file\n'
+    usage += '    -rm_container container_id\n'
     usage += '    -show_db\n'
     usage += '    -show_db_verbose\n'
     usage += '    -destroy_db\n'
@@ -160,8 +161,8 @@ def process_request(request):
         itf_database.remove_spec(spec_id)
 
     elif cmd == '-add_container':
-        # data is container address
-        print '[QoS Manager] Add a new container on address: ' + data
+        # data is the path to the container status file
+        print '[QoS Manager] Add a new container with status: ' + data
         # this request is from system admin when creating new container
         monitor_container.insert(data)  # insert status to db
 
@@ -171,7 +172,8 @@ def process_request(request):
         # Set container availability to 0 for triggering reschedule
         status = itf_database.get_status(container_id)
         if status is not None:
-            status.ContainerAvailability = 0
+            old_avail = status.ContainerAvailability
+            status.ContainerAvailability = -1
             itf_database.update_container(status)
 
             # Reschedule every related spec - finally no spec will be on container
@@ -188,6 +190,8 @@ def process_request(request):
                 else:
                     print '[QoS Manager] Fail to reschedule spec {' \
                                 + spec_id + '} {' + data + '}'
+                    status.ContainerAvailability = old_avail
+                    itf_database.update_container(status)
                     exit(-1)
 
             # Delete container in database

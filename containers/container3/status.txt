@@ -12,8 +12,10 @@ CostPerGBMonth, 1.5	# $
 DataIntegrity, 2	# 0:worst
 StorageReserved, 0	# MB
 StorageUsed, 0	# MB
-StorageReliability, 99
-ContainerAvailability, 99
+StorageReliability, 95
+ContainerAvailability, 95
 StorageRBW_dyn, 0.0	# MB/s
 StorageWBW_dyn, 0.0	# MB/s
 PhysicalLocation, /usa/virginia/uva/chem
+NetworkAddress, grid:path3
+StatusPath,

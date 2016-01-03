@@ -17,6 +17,7 @@ class QosSpec:
             self.Latency = 'High'      # (str) 'High' or 'Low'
             # extra information
             self.PhysicalLocations = '' # (str) locations separated by ;
+            self.SpecPath = ''          # (str) grid path to the spec file
         else:
             self.SpecId, \
             self.Availability, \
@@ -26,12 +27,14 @@ class QosSpec:
             self.DataIntegrity, \
             self.Bandwidth, \
             self.Latency, \
-            self.PhysicalLocations = spec_tuple
+            self.PhysicalLocations, \
+            self.SpecPath = spec_tuple
             # convert unicode string into regular string
             self.SpecId = str(self.SpecId)
             self.Bandwidth = str(self.Bandwidth)
             self.Latency = str(self.Latency)
             self.PhysicalLocations = str(self.PhysicalLocations)
+            self.SpecPath = str(self.SpecPath)
 
     # Parse spec from a string
     def parse_string(self, spec_string):
@@ -71,6 +74,8 @@ class QosSpec:
             elif key == 'PhysicalLocations':
                 # a list of locaiton separated by ';'
                 self.PhysicalLocations = val
+            elif key == 'SpecPath':
+                self.SpecPath = val
             else:
                 print '[itf_spec] Warning: Cannot parse: ' + line
                 return -1;
@@ -86,6 +91,7 @@ class QosSpec:
         spec = f.read()
         self.parse_string(spec)
         f.close()
+        self.SpecPath = path
         return True
 
     # Generate a multi-line string
@@ -99,7 +105,8 @@ class QosSpec:
              + 'DataIntegrity' + ', ' + str(self.DataIntegrity) + '\t# 0:worst\n' \
              + 'Bandwidth'     + ', ' + str(self.Bandwidth    ) + '\t# High or Low\n' \
              + 'Latency'       + ', ' + str(self.Latency      ) + '\t# High or Low\n' \
-             + 'PhysicalLocations' + ',' + str(self.PhysicalLocations) + '\n'
+             + 'PhysicalLocations' + ',' + str(self.PhysicalLocations) + '\n' \
+             + 'SpecPath'      + ',' + str(self.SpecPath) + '\n'
         return spec
 
     # Get physical location list
@@ -132,7 +139,8 @@ class QosSpec:
                 self.DataIntegrity,
                 self.Bandwidth    ,
                 self.Latency      ,
-                self.PhysicalLocations)
+                self.PhysicalLocations,
+                self.SpecPath     )
 
 
 # A string for creating the specification table in sqlite
@@ -146,7 +154,8 @@ def get_sql_header():
              "DataIntegrity     INT," + \
              "Bandwidth         TEXT," + \
              "Latency           TEXT," + \
-             "PhysicalLocations TEXT" + \
+             "PhysicalLocations TEXT," + \
+             "SpecPath          TEXT" + \
              ");"
     return header
 

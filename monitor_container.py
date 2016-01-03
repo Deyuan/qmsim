@@ -11,10 +11,9 @@ import itf_status
 import monitor_qos
 
 # Wrapper for pulling a file from remote container on Internet
-def get_container_status(container_addr):
-    path = os.path.join(container_addr, 'status.txt')
+def get_container_status(status_path):
     status = itf_status.ContainerStatus()
-    succ = status.read_from_file(path)
+    succ = status.read_from_file(status_path)
     if succ:
         return status
     else:
@@ -44,16 +43,16 @@ def update(record):
             monitor_qos.monitor_container(record.container_id)
 
 # Insert a new container status to database, called by QoS Manager
-def insert(container_addr):
-    status_remote = get_container_status(container_addr)
+def insert(status_path):
+    status_remote = get_container_status(status_path)
     if status_remote is not None:
         container_id = status_remote.ContainerId
-        status_remote.NetworkAddress = container_addr
+        status_remote.StatusPath = status_path
         # Initial reserved size = used size
         status_remote.StorageReserved = status_remote.StorageUsed
         added = itf_database.update_container(status_remote, init=True)
     else:
-        print "[Container Monitor] Container address " + container_addr + \
+        print "[Container Monitor] Status path " + status_path + \
                 " is not available"
 
 
