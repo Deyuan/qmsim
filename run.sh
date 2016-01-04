@@ -5,10 +5,10 @@ python qos_manager.py -destroy_db
 
 python qos_manager.py -show_db
 
-python qos_manager.py -add_container containers/container1/status.txt
-python qos_manager.py -add_container containers/container2/status.txt
-python qos_manager.py -add_container containers/container3/status.txt
-python qos_manager.py -add_container containers/container4/status.txt
+python qos_manager.py -add_container containers/flax-status.txt
+python qos_manager.py -add_container containers/lavender-status.txt
+python qos_manager.py -add_container containers/onyx-status.txt
+python qos_manager.py -add_container containers/plum-status.txt
 
 python qos_manager.py -show_db_verbose
 
