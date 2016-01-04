@@ -56,6 +56,46 @@ def check_bandwidth(spec, container_status):
         else:
             return False
 
+def check_dataintegrity(spec,container_status):
+    for status in container_status:
+        if status.DataIntegrity > spec.DataIntegrity:
+            return True
+        else:
+            return False
+
+#check bandwidth for new scheduled spec
+def check_bandwidth_new(spec, container_status):
+    if spec.Bandwidth == 'Low':
+        return True
+    else:
+        BW_threshold = 5  # assume 5 MB/s is high enough
+        
+        for status in container_status:
+            free_RBW = status.StorageRBW - status.StorageRBW_dyn
+            free_WBW = status.StorageWBW - status.StorageWBW_dyn
+            if free_RBW >= BW_threshold and free_WBW >= BW_threshold:
+                return True
+            else:
+#                print 'bandwidth not statisfied'
+                return False
+
+#check latency using physical location, assuming if first two levels
+#are the same, the latency can be satisfied
+def check_latency(spec, container_status):
+    if spec.Latency == 'High':
+        return True
+    else:
+        for status in container_status:
+            spec_level1=spec.PhysicalLocations.strip().split('/')[1]
+            spec_level2=spec.PhysicalLocations.strip().split('/')[2]
+            container_level1=status.PhysicalLocation.strip().split('/')[1]
+            container_level2=status.PhysicalLocation.strip().split('/')[2]
+
+            if spec_level1==container_level1 and spec_level2 == container_level2:
+                return True
+            else:
+#                print 'latency not satisfied'
+                return False
 
 # QoS Checker main entry: Check if a list of container can satisfy a spec
 def check_satisfiability(spec_id, container_id_list):
@@ -74,6 +114,16 @@ def check_satisfiability(spec_id, container_id_list):
     satisfied = satisfied and check_space(spec, container_status)
     if not satisfied:
         print '[QoS Checker] Disk space not satisfied for spec: ' + spec_id
+    
+    #check latency
+    satisfied = satisfied and check_latency(spec, container_status)
+    if not satisfied:
+        print '[QoS Checker] Latency not satisfied for spec: ' + spec_id
+        
+    #check dataintegrity
+    satisfied = satisfied and check_dataintegrity(spec, container_status)
+    if not satisfied:
+        print '[QoS Checker] Dataintegrity not satisfied for spec: ' + spec_id
 
     # Check reliability
     satisfied = satisfied and check_reliability(spec, container_status)

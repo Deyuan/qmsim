@@ -63,6 +63,36 @@ def schedule_1(spec):
                 return scheduled_containers, info
     return scheduled_containers, info
 
+# Chunkun: check storage, bandwidth, dataintegirty availability and reliability
+def schedule_2(spec):
+    scheduled_containers = []
+    info = ''
+    container_id_list_all = itf_database.get_container_id_list()
+    # filter out some containers
+    container_id_list = []
+    for cid in container_id_list_all:
+        status = itf_database.get_status(cid)
+        if qos_checker.check_space(spec, [status]) and \
+                qos_checker.check_dataintegrity(spec,[status]) and \
+                qos_checker.check_bandwidth_new(spec,[status]) and \
+                qos_checker.check_latency(spec,[status]) and \
+                status.StorageReliability > 0 and \
+                status.ContainerAvailability > 0:
+            container_id_list.append(cid)
+    # check if k containers together can satisfy the spec
+    for k in range(min(5, len(container_id_list))):
+        cid_comb = list(itertools.combinations(container_id_list, k))
+        for comb in cid_comb:
+            cid_list = list(comb)
+            status_list = [itf_database.get_status(x) for x in cid_list]
+            if qos_checker.check_availability(spec, status_list) and \
+                    qos_checker.check_reliability(spec, status_list):
+                scheduled_containers = cid_list
+                costs = [x.CostPerGBMonth for x in status_list]
+                cost = sum(costs) / 1024.0 * spec.ReservedSize
+                info = '$%.2f/month' % cost
+                return scheduled_containers, info
+    return scheduled_containers, info
 
 # Top level scheduler entry
 # Input a QosSpec class instance, return a list of containers
@@ -72,7 +102,7 @@ def schedule (spec, task):
 
     # Pick a schedule strategy
     if task == 'new' or task == 'update':
-        scheduled_containers, info = schedule_1(spec)
+        scheduled_containers, info = schedule_2(spec)
     else:
         scheduled_containers = []
         info = 'unsupported task'
