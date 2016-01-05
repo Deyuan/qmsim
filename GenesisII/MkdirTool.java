@@ -3,15 +3,19 @@ package edu.virginia.vcgr.genii.client.cmd.tools;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.util.List;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.morgan.util.io.StreamUtils;
 import org.oasis_open.docs.wsrf.rl_2.Destroy;
 import org.ws.addressing.EndpointReferenceType;
 
 import edu.virginia.vcgr.genii.client.WellKnownPortTypes;
+import edu.virginia.vcgr.genii.client.byteio.ByteIOConstants;
 import edu.virginia.vcgr.genii.client.cmd.InvalidToolUsageException;
 import edu.virginia.vcgr.genii.client.cmd.ReloadShellException;
 import edu.virginia.vcgr.genii.client.cmd.ToolException;
@@ -48,6 +52,8 @@ public class MkdirTool extends BaseGridTool
 
 	private boolean _parents = false;
 	private String _rnsService = null;
+	private String _specsPath = null;
+	private String _qosServer = null;
 
 	public MkdirTool()
 	{
@@ -67,11 +73,23 @@ public class MkdirTool extends BaseGridTool
 		_rnsService = service;
 	}
 
+	@Option({ "specs" })
+	public void set_specs(String path)
+	{
+		_specsPath = path;
+	}
+
+	@Option({ "qos-server" })
+	public void set_qos_server(String server)
+	{
+		_qosServer = server;
+	}
+
 	@Override
 	protected int runCommand() throws ReloadShellException, ToolException, UserCancelException, RNSException, AuthZSecurityException,
 		IOException, ResourcePropertyException
 	{
-		return makeDirectory(_parents, _rnsService, getArguments(), stderr);
+		return makeDirectory(_parents, _rnsService, _specsPath, _qosServer, getArguments(), stderr);
 	}
 
 	@Override
@@ -88,11 +106,18 @@ public class MkdirTool extends BaseGridTool
 			new GeniiPath(path).path()).getEndpoint();
 	}
 
-	public static int makeDirectory(boolean parents, String rnsService, List<String> pathsToCreate, PrintWriter stderr) throws RNSException,
+	public static int makeDirectory(boolean parents, String rnsService, String specsPath, String qosServer, List<String> pathsToCreate, PrintWriter stderr) throws RNSException,
 		InvalidToolUsageException, FileNotFoundException, IOException
 	{
 		boolean createParents = false;
 		EndpointReferenceType service = null;
+
+		if (specsPath != null) {
+			String msg = "QoS Service: Dynamically scheduling with specifications: " + specsPath;
+			System.out.println(msg);
+			if (qosServer == null) qosServer = "localhost";
+			List<String> scheduled_results = qos_service(specsPath, qosServer);
+		}
 
 		if (rnsService != null) {
 			GeniiPath gPath = new GeniiPath(rnsService);
@@ -178,5 +203,32 @@ public class MkdirTool extends BaseGridTool
 			}
 		}
 		return 0;
+	}
+	
+	private static List<String> qos_service(String specsPath, String qosServer) throws IOException
+	{
+		char[] data = new char[ByteIOConstants.PREFERRED_SIMPLE_XFER_BLOCK_SIZE];
+		int read;
+		InputStream in = null;
+		InputStreamReader reader = null;
+		String specs = "";
+
+		try {
+			GeniiPath path = new GeniiPath(specsPath);
+			in = path.openInputStream();
+			reader = new InputStreamReader(in);
+
+			while ((read = reader.read(data, 0, data.length)) > 0) {
+				String s = new String(data, 0, read);
+				specs = specs + s;
+			}
+		} finally {
+			StreamUtils.close(reader);
+			StreamUtils.close(in);
+		}
+
+		System.out.println("QoS Service: Input specs:\n" + specs);
+		
+		return null;
 	}
 }
