@@ -74,8 +74,6 @@ def schedule_2(spec):
         status = itf_database.get_status(cid)
         if qos_checker.check_space(spec, [status]) and \
                 qos_checker.check_dataintegrity(spec,[status]) and \
-                qos_checker.check_bandwidth_new(spec,[status]) and \
-                qos_checker.check_latency(spec,[status]) and \
                 status.StorageReliability > 0 and \
                 status.ContainerAvailability > 0:
             container_id_list.append(cid)
@@ -86,7 +84,9 @@ def schedule_2(spec):
             cid_list = list(comb)
             status_list = [itf_database.get_status(x) for x in cid_list]
             if qos_checker.check_availability(spec, status_list) and \
-                    qos_checker.check_reliability(spec, status_list):
+                    qos_checker.check_reliability(spec, status_list) and \
+                    qos_checker.check_bandwidth(spec, status_list) and \
+                    qos_checker.check_latency(spec, status_list):
                 scheduled_containers = cid_list
                 costs = [x.CostPerGBMonth for x in status_list]
                 cost = sum(costs) / 1024.0 * spec.ReservedSize

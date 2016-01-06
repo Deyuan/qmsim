@@ -431,4 +431,241 @@ public class QosManagerTool extends BaseGridTool
 	    if (spec != null) System.out.println(spec.to_string());
 	    else System.out.println("Error");
 	}
+	
+	
+	/**************************************************************************
+	 *  QoS Checker
+	 **************************************************************************/
+	// Check if disk space is satisfied
+	// Rule: for every container, free space >= (client reserved - client used)
+	private boolean check_space(QosSpec spec, List<ContainerStatus> status_list) {
+		for (int i = 0; i < status_list.size(); i++) {
+			ContainerStatus status = status_list.get(i);
+			if (status.StorageTotal - status.StorageUsed < spec.ReservedSize - spec.UsedSize) {
+				return false;
+			}
+		}
+		return status_list.size() > 0;
+	}
+	// Reliability rule: All container together should satisfy the spec
+	private boolean check_reliability(QosSpec spec, List<ContainerStatus> status_list) {
+		double spec_reliability = Double.parseDouble("0." + Integer.toString(spec.Reliability));
+		double container_failure = 1.0;
+		for (int i = 0; i < status_list.size(); i++) {
+			ContainerStatus status = status_list.get(i);
+			container_failure = container_failure * 
+					(1 - Double.parseDouble("0." + Integer.toString(status.StorageReliability)));
+		}
+		if (1 - container_failure >= spec_reliability) {
+			return true;
+		} else {
+			return false;
+		}
+	}
+	// Availability rule: All container together should satisfy the spec
+	private boolean check_availability(QosSpec spec, List<ContainerStatus> status_list) {
+		double spec_availability = Double.parseDouble("0." + Integer.toString(spec.Availability));
+		double container_unavailable = 1.0;
+		for (int i = 0; i < status_list.size(); i++) {
+			ContainerStatus status = status_list.get(i);
+			container_unavailable = container_unavailable * 
+					(1 - Double.parseDouble("0." + Integer.toString(status.ContainerAvailability)));
+		}
+		if (1 - container_unavailable >= spec_availability) {
+			return true;
+		} else {
+			return false;
+		}
+	}
+	// Bandwidth rule: Even if there are multiple replications, client only use 
+	// one container for the spec. Only check the primary container.
+	boolean check_bandwidth(QosSpec spec, List<ContainerStatus> status_list) {
+		if (spec.Bandwidth == "Low") {
+			return true;
+		} else {
+			double BW_threshold = 5.0; // assume 5 MB/s is the threshold
+			// the first container is the primary container to use
+			ContainerStatus primary = status_list.get(0);
+			double free_RBW = primary.StorageRBW - primary.StorageRBW_dyn;
+			double free_WBW = primary.StorageWBW - primary.StorageWBW_dyn;
+			if (free_RBW >= BW_threshold && free_WBW >= BW_threshold) {
+				return true;
+			} else {
+				return false;
+			}
+		}
+	}
+	// Rule: Every container should satisfy the data integrity requirement.
+	boolean check_dataintegrity(QosSpec spec, List<ContainerStatus> status_list) {
+		for (int i = 0; i < status_list.size(); i++) {
+			ContainerStatus status = status_list.get(i);
+			if (status.DataIntegrity < spec.DataIntegrity) {
+				return false;
+			}
+		}
+		return true;
+	}
+	// check latency using physical location, assuming if first two levels
+	// are the same, the latency can be satisfied; only check the primary
+	boolean check_latency(QosSpec spec, List<ContainerStatus> status_list) {
+		if (spec.Latency == "High") {
+			return true;
+		} else {
+			ContainerStatus primary = status_list.get(0);
+			// TODO: parse strings
+			//String spec_level1 = spec.PhysicalLocations.strip().split('/')[1];
+			//String spec_level2 = spec.PhysicalLocations.strip().split('/')[2];
+			//String container_level1 = primary.PhysicalLocation.strip().split('/')[1];
+			//String container_level2 = primary.PhysicalLocation.strip().split('/')[2];
+			//if (spec_level1 == container_level1 && spec_level2 == contaienr_level2) {
+			//	return true;
+			//} else {
+			//	return false;
+			//}
+			return false;
+		}
+	}
+	// QoS Checker main entry: Check if a list of container can satisfy a spec
+	boolean check_all(QosSpec spec, List<ContainerStatus> status_list) {
+		System.out.println("[QoS Checker] Check satisfiability of spec " + spec.SpecId +
+				" on containers " + status_list.toString());
+		boolean satisfied = true;
+		if (status_list.size() == 0) { // not scheduled
+			return false;
+		}
+		// Check disk space
+		satisfied = satisfied && check_space(spec, status_list);
+		if (!satisfied) {
+			System.out.println("[QoS Checker] Disk space not satisfied for spec: " + spec.SpecId);
+		}
+		// Check data integrity
+		satisfied = satisfied && check_dataintegrity(spec, status_list);
+		if (!satisfied) {
+			System.out.println("[QoS Checker] Dataintegrity not satisfied for spec: " + spec.SpecId);
+		}
+		// Check reliability
+		satisfied = satisfied && check_reliability(spec, status_list);
+		if (!satisfied) {
+			System.out.println("[QoS Checker] Reliability not satisfied for spec: " + spec.SpecId);
+		}
+		// Check availability
+		satisfied = satisfied && check_availability(spec, status_list);
+		if (!satisfied) {
+			System.out.println("[QoS Checker] Availability not satisfied for spec: " + spec.SpecId);
+		}
+		// Check bandwidth
+		satisfied = satisfied && check_bandwidth(spec, status_list);
+		if (!satisfied) {
+			System.out.println("[QoS Checker] Bandwidth not satisfied for spec: " + spec.SpecId);
+		}
+		// Check latency
+		satisfied = satisfied && check_latency(spec, status_list);
+		if (!satisfied) {
+			System.out.println("[QoS Checker] Latency not satisfied for spec: " + spec.SpecId);
+		}
+		if (satisfied) {
+			System.out.println("[QoS Checker] Spec " + spec.SpecId + " is satisfied on " + status_list.toString());
+		}	
+		return satisfied;
+	}
+	
+	/**************************************************************************
+	 *  QoS Scheduler
+	 **************************************************************************/
+	// Schedule filter: filter out some single containers
+	boolean schedule_filter(QosSpec spec, ContainerStatus status) {
+		if (status.ContainerAvailability <= 0) return false;
+		if (status.StorageReliability <= 0) return false;
+		List<ContainerStatus> tmp = new ArrayList<ContainerStatus>();
+		tmp.add(status);
+		if (!check_space(spec, tmp)) return false;
+		if (!check_dataintegrity(spec, tmp)) return false;
+		return true;
+	}
+	// return a list of scheduled container ids
+	private List<String> schedule(QosSpec spec) {
+		List<String> scheduled_containers = new ArrayList<String>();
+		List<String> container_ids = db_get_container_id_list();
+		List<ContainerStatus> status_list = new ArrayList<ContainerStatus>();
+		// filter out some containers
+		List<ContainerStatus> tmp = new ArrayList<ContainerStatus>();
+		for (int i = 0; i < container_ids.size(); i++) {
+			ContainerStatus status = db_get_status(container_ids.get(i));
+			if (schedule_filter(spec, status)) {
+				status_list.add(status);
+			}
+		}
+		boolean scheduled = false;
+		// try a single container
+		for (int i = 0; i < status_list.size(); i++) {
+			tmp.clear();
+			tmp.add(status_list.get(i));
+			if (check_all(spec, tmp)) {
+				scheduled = true;
+				break;
+			}
+		}
+		// try 2 containers
+		if (!scheduled) {
+			for (int i = 0; i < status_list.size(); i++) {
+				for (int j = i; j < status_list.size(); j++) {
+					tmp.clear();
+					tmp.add(status_list.get(i));
+					tmp.add(status_list.get(j));
+					if (check_all(spec, tmp)) {
+						scheduled = true;
+						break;
+					}
+				}
+			}
+		}
+		// try 3 containers
+		if (!scheduled) {
+			for (int i = 0; i < status_list.size(); i++) {
+				for (int j = i; j < status_list.size(); j++) {
+					for (int k = j; k < status_list.size(); k++) {
+						tmp.clear();
+						tmp.add(status_list.get(i));
+						tmp.add(status_list.get(j));
+						tmp.add(status_list.get(k));
+						if (check_all(spec, tmp)) {
+							scheduled = true;
+							break;
+						}
+					}
+				}
+			}
+		}
+		// try 4 containers
+		if (!scheduled) {
+			for (int i = 0; i < status_list.size(); i++) {
+				for (int j = i; j < status_list.size(); j++) {
+					for (int k = j; k < status_list.size(); k++) {
+						for (int l = k; l < status_list.size(); l++) {
+							tmp.clear();
+							tmp.add(status_list.get(i));
+							tmp.add(status_list.get(j));
+							tmp.add(status_list.get(k));
+							tmp.add(status_list.get(l));
+							if (check_all(spec, tmp)) {
+								scheduled = true;
+								break;
+							}
+						}
+					}
+				}
+			}
+		}
+		if (scheduled) {
+			double costs = 0;
+			for (ContainerStatus status: tmp) {
+				scheduled_containers.add(status.ContainerId);
+				costs += status.CostPerGBMonth;
+			}
+			double cost = costs / 1024.0 * spec.ReservedSize;
+			System.out.println("Schedule results: " + scheduled_containers.toString());
+			System.out.printf("Cost: $%.2f/month", cost);
+		}
+		return scheduled_containers;
+	}
 }
