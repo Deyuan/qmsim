@@ -11,6 +11,8 @@ import org.morgan.util.io.StreamUtils;
 import edu.virginia.vcgr.genii.client.byteio.ByteIOConstants;
 import edu.virginia.vcgr.genii.client.cmd.ReloadShellException;
 import edu.virginia.vcgr.genii.client.cmd.ToolException;
+import edu.virginia.vcgr.genii.client.context.ContextManager;
+import edu.virginia.vcgr.genii.client.context.ICallingContext;
 import edu.virginia.vcgr.genii.client.dialog.UserCancelException;
 import edu.virginia.vcgr.genii.client.gpath.GeniiPath;
 import edu.virginia.vcgr.genii.client.io.LoadFileResource;
@@ -24,8 +26,97 @@ public class QosManagerTool extends BaseGridTool
 	static final private String _USAGE = "config/tooldocs/usage/uqos-manager";
 	static final private String _MANPAGE = "config/tooldocs/man/qos-manager";
 
+	private String _spec_path_to_schedule = null;
+	private String _spec_id_to_schedule = null;
+	private String _spec_id_to_remove = null;
+	private String _status_path_to_add = null;
+	private String _container_id_to_remove = null;
+	private boolean _show_db = false;
+	private boolean _show_db_verbose = false;
+	private boolean _clean_db = false;
+	private boolean _monitor = false;
 	private boolean _test_db = false;
 	
+	public QosManagerTool()
+	{
+		super(new LoadFileResource(_DESCRIPTION), new LoadFileResource(_USAGE), false, ToolCategory.ADMINISTRATION);
+		addManPage(new LoadFileResource(_MANPAGE));
+	}
+
+	@Option({ "schedule" })
+	public void set_schedule(String spec_path)
+	{
+		_spec_path_to_schedule = spec_path;
+	}
+
+	@Option({ "schedule-id" })
+	public void set_schedule_id(String spec_id)
+	{
+		_spec_id_to_schedule = spec_id;
+	}
+
+	@Option({ "rm-spec" })
+	public void set_rm_spec(String spec_id)
+	{
+		_spec_id_to_remove = spec_id;
+	}
+
+	@Option({ "add-container" })
+	public void set_add_container(String status_path)
+	{
+		_status_path_to_add = status_path;
+	}
+
+	@Option({ "rm-container" })
+	public void set_rm_container(String container_id)
+	{
+		_container_id_to_remove = container_id;
+	}
+
+	@Option({ "show-db" })
+	public void set_show_db()
+	{
+		_show_db = true;
+	}
+
+	@Option({ "show-db-verbose" })
+	public void set_show_db_verbose()
+	{
+		_show_db_verbose = true;
+	}
+
+	@Option({ "clean-db" })
+	public void set_clean_db()
+	{
+		_clean_db = true;
+	}
+
+	@Option({ "monitor" })
+	public void set_monitor()
+	{
+		_monitor = true;
+	}
+
+	@Option({ "test-db" })
+	public void set_test_db()
+	{
+		_test_db = true;
+	}
+
+
+	@Override
+	protected int runCommand() throws ReloadShellException, ToolException, UserCancelException, RNSException, AuthZSecurityException,
+		IOException, ResourcePropertyException
+	{
+		qos_manager(getArgument(0));
+		return 0;
+	}
+
+	@Override
+	protected void verify() throws ToolException
+	{
+	}
+
 	private class QosSpec
 	{
         public String SpecId = "";     			// (str) a unique string
@@ -157,44 +248,47 @@ public class QosManagerTool extends BaseGridTool
 		}
 	}
 
-	public QosManagerTool()
-	{
-		super(new LoadFileResource(_DESCRIPTION), new LoadFileResource(_USAGE), false, ToolCategory.ADMINISTRATION);
-		addManPage(new LoadFileResource(_MANPAGE));
-	}
-
-	@Option({ "test-db" })
-	public void set_test_db()
-	{
-		_test_db = true;
-	}
-
-	@Override
-	protected int runCommand() throws ReloadShellException, ToolException, UserCancelException, RNSException, AuthZSecurityException,
-		IOException, ResourcePropertyException
+	public void qos_manager(String arg) throws IOException
 	{
 		System.out.println("(qos-manager) Main entry.");
-		qos_manager(_test_db, getArgument(0));
-
-		return 0;
-	}
-
-	@Override
-	protected void verify() throws ToolException
-	{
-	}
-
-	public void qos_manager(boolean test_db, String path) throws IOException
-	{
-		if (test_db) {
+		if (_spec_path_to_schedule != null) {
+			System.out.println("(qos_manager) Schedule a QoS specs file at " + _spec_path_to_schedule);
+			// TODO: call scheduler
+		} else if (_spec_id_to_schedule != null) {
+			System.out.println("(qos_manager) Schedule a QoS specs id " + _spec_id_to_schedule);
+			// TODO: call scheduler
+		} else if (_spec_id_to_remove != null) {
+			System.out.println("(qos_manager) Remove a QoS specs id " + _spec_id_to_remove);
+			db_remove_spec(_spec_id_to_remove);
+		} else if (_status_path_to_add != null) {
+			System.out.println("(qos_manager) Add a container with status file at " + _status_path_to_add);
+			ContainerStatus status = new ContainerStatus();
+			status.read_from_file(_status_path_to_add);
+			db_update_container(status, true); // init
+		} else if (_container_id_to_remove != null) {
+			System.out.println("(qos_manager) Remove container id " + _container_id_to_remove);
+			db_remove_container(_container_id_to_remove);
+		} else if (_show_db) {
+			System.out.println("(qos_manager) Show information of the QoS database.");
+			db_summary(false);
+		} else if (_show_db_verbose) {
+			System.out.println("(qos_manager) Show details of the QoS database.");
+			db_summary(true);
+		} else if (_clean_db) {
+			System.out.println("(qos_manager) Clean QoS database.");
+			db_init();
+		} else if (_monitor) {
+			System.out.println("(qos_manager) Monitor container status and specs.");
+			// TODO: add monitors code here
+		} else if (_test_db) {
 			System.out.println("(qos_manager) Test the QoS database.");
 			test_db();
 		} else {
-			System.out.println("(qos_manager) Not yet implemented.");
+			System.out.println("(qos_manager) Not yet implemented...");			
 		}
 	}
 	
-	/* QoS database interfaces */
+	/* QoS database interfaces */	
 	private boolean db_destroy() {
 		System.out.println("(qos_manager) NYI.");
 		return false;
