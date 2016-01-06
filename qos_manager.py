@@ -128,7 +128,7 @@ def process_request(request):
             spec_db = itf_database.get_spec(spec.SpecId)
 
             if spec_db == None: # spec does not exist
-                print '[QoS Manager] Schedule for new spec {' + spec.SpecId + '}'
+		print '[QoS Manager] Schedule for new spec {' + spec.SpecId + '}'
                 scheduled_containers, data = qos_scheduler.schedule(spec, task='new')
 
                 if len(scheduled_containers) > 0:
@@ -141,7 +141,8 @@ def process_request(request):
                     exit(-1)
 
             else: # reschedule for updated spec
-                print '[QoS Manager] Reschedule for spec {' + spec.SpecId + '}'
+                print '[QoS Manager] User specification already exists'
+		print '[QoS Manager] Reschedule for spec {' + spec.SpecId + '}'
                 scheduled_containers, data = qos_scheduler.schedule(spec, task='update')
 
                 if len(scheduled_containers) > 0:
@@ -165,6 +166,8 @@ def process_request(request):
         print '[QoS Manager] Add a new container with status: ' + data
         # this request is from system admin when creating new container
         monitor_container.insert(data)  # insert status to db
+	status = itf_database.get_status(data)
+	print '[QoS Manager] Successfully adds new container ' + data
 
     elif cmd == '-rm_container':
         container_id = data

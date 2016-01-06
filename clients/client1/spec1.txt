@@ -5,6 +5,6 @@ Reliability, 99
 ReservedSize, 1000	# MB
 UsedSize, 0	# MB
 DataIntegrity, 0	# 0:worst
-Bandwidth, Low	# High or Low
+Bandwidth, High	# High or Low
 Latency, High	# High or Low
 PhysicalLocations, /usa/virginia/uva/cs
