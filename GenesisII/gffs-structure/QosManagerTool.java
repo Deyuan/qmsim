@@ -1,10 +1,16 @@
 package edu.virginia.vcgr.genii.client.cmd.tools;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.sql.*;
+import org.sqlite.*;
+
 
 import org.morgan.util.io.StreamUtils;
 
@@ -36,6 +42,9 @@ public class QosManagerTool extends BaseGridTool
 	private boolean _clean_db = false;
 	private boolean _monitor = false;
 	private boolean _test_db = false;
+	
+	private String QOSDBPath = "/home/dg/database/";
+	private String QOSDBName = QOSDBPath + "qos.db"; 
 	
 	public QosManagerTool()
 	{
@@ -289,18 +298,78 @@ public class QosManagerTool extends BaseGridTool
 	}
 	
 	/* QoS database interfaces */	
-	private boolean db_destroy() {
-		System.out.println("(qos_manager) NYI.");
-		return false;
+	private void db_destroy() {
+		File dbFile = new File(this.QOSDBName);
+	    dbFile.delete();
 	}
 
 	private boolean db_init() {
-		System.out.println("(qos_manager) NYI.");
+		ContainerStatus status = new ContainerStatus();
+		QosSpec spec = new QosSpec();
+		// if exists
+		File dbFile = new File(this.QOSDBName);
+		
+		if(dbFile.exists()){
+			db_destroy();
+		}
+		Connection conn = null;
+		Statement stmt = null;
+		try{
+			Class.forName("org.sqlite.JDBC");
+			conn = DriverManager.getConnection("jdbc:sqlite:"+this.QOSDBName);
+			System.out.println("Connect to DB successfully...");
+			stmt = conn.createStatement();
+			// create table1 and table2
+			String create_spec_table = "CREATE TABLE" + spec.get_sql_header();
+			String create_status_table = "CREATE TABLE" + status.get_sql_header();
+			
+			stmt.executeUpdate(create_spec_table);
+			stmt.executeUpdate(create_status_table);
+				
+			String sql = "CREATE TABLE Relationships(SpecId TEXT, ContainerId TEXT, UNIQUE(SpecId, ContainerId) ON CONFLICT REPLACE);";
+			//stmt.executeQuery(sql);
+			stmt.executeUpdate(sql);
+			stmt.close();
+			conn.close();
+			return true;
+		} catch (Exception e) {
+			System.out.println(e.getClass().getName() + ": " + e.getMessage());
+			System.exit(-1);
+		}
 		return false;
 	}
 
 	private void db_summary(boolean verbose) {
 		System.out.println("(qos_manager) NYI.");
+		
+		Connection conn = null;
+		Statement stmt = null;
+		try{
+			Class.forName("org.sqlite.JDBC");
+			conn = DriverManager.getConnection("jdbc:sqlite:"+this.QOSDBName);
+			
+			String[] anArray;
+			anArray = new String[3];
+			anArray[0] = "Specifications";
+			anArray[1] = "Containers";
+			anArray[2] = "Relationships";
+			System.out.println("--------------------");
+			System.out.println("[itf_database] QoS Database Summary");
+			
+			stmt = conn.createStatement();
+			// create table1 and table2
+			String get_spec_info = "SELECT * FROM Specifications;";
+			
+			stmt.executeUpdate(get_spec_info);
+			
+			System.out.println(get_spec_info);
+			
+			stmt.close();
+			conn.close();
+		} catch (Exception e) {
+			System.out.println(e.getClass().getName() + ": " + e.getMessage());
+			System.exit(-1);
+		}		
 	}
 
 	private boolean db_update_container(ContainerStatus status, boolean update) {
@@ -359,7 +428,7 @@ public class QosManagerTool extends BaseGridTool
 	}
 
 	private void test_db() {
-	    db_init();
+		db_init();
 	    db_summary(false);
 	    db_summary(true);
 
