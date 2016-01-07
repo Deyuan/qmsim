@@ -1,4 +1,4 @@
-# Container Monitori
+# Container Monitor
 # Monitoring container status, updating to database, and checking related specs
 # Author: Chunkun Bo, Deyuan Guo
 # Date: Dec 9, 2015
@@ -15,33 +15,26 @@ def get_container_status(status_path):
     status = itf_status.ContainerStatus()
     succ = status.read_from_file(status_path)
     if succ:
-   	 return status
+        return status
     else:
-         return None
+        return None
 
 # update a container information
-def update(record):
-    #status_remote = get_container_status(record)
-    status_in_db = itf_database.get_status(record)
-    status_remote = get_container_status(status_in_db.NetworkAddress)
+def update(container_id):
+    status_in_db = itf_database.get_status(container_id)
+    assert status_in_db != None
+    status_remote = get_container_status(status_in_db.StatusPath)
     if status_remote == None:
-        print '[Container Monitor] Container ' + record + \
-                   ' not available.'
+        print '[Container Monitor] Container', container_id, 'not available.'
         # TODO: update database and reschedule
     else:
-        assert status_remote.ContainerId == record
-        if status_in_db == None:
-            print '[Container Monitor] Insert ' + record + ' status to database.'
-            # Default reserved size = used size
-            status_remote.StorageReserved = status_remote.StorageUsed
-            itf_database.update_contianer(status_remote)
-        else:
-            # Avoid overwriting the reservable size (container doesn't know this)
-            status_remote.StorageReserved = status_in_db.StorageReserved
-            itf_database.update_container(status_remote)
-            # call QoS Monitor
-            print '[Container Monitor] Call QoS Monitor for '
-            monitor_qos.monitor_container(record)
+        assert status_remote.ContainerId == container_id
+        # Avoid overwriting the reservable size (container doesn't know this)
+        status_remote.StorageReserved = status_in_db.StorageReserved
+        itf_database.update_container(status_remote)
+        # call QoS Monitor
+        print '[Container Monitor] Call QoS Monitor for', container_id
+        monitor_qos.monitor_container(container_id)
 
 # Insert a new container status to database, called by QoS Manager
 def insert(status_path):

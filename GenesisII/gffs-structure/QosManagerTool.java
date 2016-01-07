@@ -1,16 +1,10 @@
 package edu.virginia.vcgr.genii.client.cmd.tools;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.sql.*;
-import org.sqlite.*;
-
 
 import org.morgan.util.io.StreamUtils;
 
@@ -32,6 +26,14 @@ public class QosManagerTool extends BaseGridTool
 	static final private String _USAGE = "config/tooldocs/usage/uqos-manager";
 	static final private String _MANPAGE = "config/tooldocs/man/qos-manager";
 
+	static QosManagerTool QosManager = null;
+	static QosManagerTool factory() {
+		if (QosManager == null) {
+			QosManager = new QosManagerTool();
+		}
+		return QosManager;
+	}
+	
 	private String _spec_path_to_schedule = null;
 	private String _spec_id_to_schedule = null;
 	private String _spec_id_to_remove = null;
@@ -42,9 +44,6 @@ public class QosManagerTool extends BaseGridTool
 	private boolean _clean_db = false;
 	private boolean _monitor = false;
 	private boolean _test_db = false;
-	
-	private String QOSDBPath = "/home/dg/database/";
-	private String QOSDBName = QOSDBPath + "qos.db"; 
 	
 	public QosManagerTool()
 	{
@@ -262,114 +261,53 @@ public class QosManagerTool extends BaseGridTool
 		System.out.println("(qos-manager) Main entry.");
 		if (_spec_path_to_schedule != null) {
 			System.out.println("(qos_manager) Schedule a QoS specs file at " + _spec_path_to_schedule);
-			// TODO: call scheduler
+			schedule(_spec_path_to_schedule, _spec_id_to_schedule);
 		} else if (_spec_id_to_schedule != null) {
 			System.out.println("(qos_manager) Schedule a QoS specs id " + _spec_id_to_schedule);
-			// TODO: call scheduler
+			schedule(_spec_path_to_schedule, _spec_id_to_schedule);
 		} else if (_spec_id_to_remove != null) {
 			System.out.println("(qos_manager) Remove a QoS specs id " + _spec_id_to_remove);
 			db_remove_spec(_spec_id_to_remove);
 		} else if (_status_path_to_add != null) {
-			System.out.println("(qos_manager) Add a container with status file at " + _status_path_to_add);
-			ContainerStatus status = new ContainerStatus();
-			status.read_from_file(_status_path_to_add);
+			System.out.println("(qos-manager) Add a container with status file at " + _status_path_to_add);
+			ContainerStatus status = read_status_file(_status_path_to_add);
 			db_update_container(status, true); // init
 		} else if (_container_id_to_remove != null) {
-			System.out.println("(qos_manager) Remove container id " + _container_id_to_remove);
+			System.out.println("(qos-manager) Remove container id " + _container_id_to_remove);
 			db_remove_container(_container_id_to_remove);
 		} else if (_show_db) {
-			System.out.println("(qos_manager) Show information of the QoS database.");
+			System.out.println("(qos-manager) Show information of the QoS database.");
 			db_summary(false);
 		} else if (_show_db_verbose) {
-			System.out.println("(qos_manager) Show details of the QoS database.");
+			System.out.println("(qos-manager) Show details of the QoS database.");
 			db_summary(true);
 		} else if (_clean_db) {
-			System.out.println("(qos_manager) Clean QoS database.");
+			System.out.println("(qos-manager) Clean QoS database.");
 			db_init();
 		} else if (_monitor) {
-			System.out.println("(qos_manager) Monitor container status and specs.");
-			// TODO: add monitors code here
+			System.out.println("(qos-manager) Monitor container status and specs.");
+			monitor_all();
 		} else if (_test_db) {
-			System.out.println("(qos_manager) Test the QoS database.");
+			System.out.println("(qos-manager) Test the QoS database.");
 			test_db();
 		} else {
-			System.out.println("(qos_manager) Not yet implemented...");			
+			System.out.println("(qos-manager) Not yet implemented...");			
 		}
 	}
 	
 	/* QoS database interfaces */	
-	private void db_destroy() {
-		File dbFile = new File(this.QOSDBName);
-	    dbFile.delete();
+	private boolean db_destroy() {
+		System.out.println("(qos_manager) NYI.");
+		return false;
 	}
 
 	private boolean db_init() {
-		ContainerStatus status = new ContainerStatus();
-		QosSpec spec = new QosSpec();
-		// if exists
-		File dbFile = new File(this.QOSDBName);
-		
-		if(dbFile.exists()){
-			db_destroy();
-		}
-		Connection conn = null;
-		Statement stmt = null;
-		try{
-			Class.forName("org.sqlite.JDBC");
-			conn = DriverManager.getConnection("jdbc:sqlite:"+this.QOSDBName);
-			System.out.println("Connect to DB successfully...");
-			stmt = conn.createStatement();
-			// create table1 and table2
-			String create_spec_table = "CREATE TABLE" + spec.get_sql_header();
-			String create_status_table = "CREATE TABLE" + status.get_sql_header();
-			
-			stmt.executeUpdate(create_spec_table);
-			stmt.executeUpdate(create_status_table);
-				
-			String sql = "CREATE TABLE Relationships(SpecId TEXT, ContainerId TEXT, UNIQUE(SpecId, ContainerId) ON CONFLICT REPLACE);";
-			//stmt.executeQuery(sql);
-			stmt.executeUpdate(sql);
-			stmt.close();
-			conn.close();
-			return true;
-		} catch (Exception e) {
-			System.out.println(e.getClass().getName() + ": " + e.getMessage());
-			System.exit(-1);
-		}
+		System.out.println("(qos_manager) NYI.");
 		return false;
 	}
 
 	private void db_summary(boolean verbose) {
 		System.out.println("(qos_manager) NYI.");
-		
-		Connection conn = null;
-		Statement stmt = null;
-		try{
-			Class.forName("org.sqlite.JDBC");
-			conn = DriverManager.getConnection("jdbc:sqlite:"+this.QOSDBName);
-			
-			String[] anArray;
-			anArray = new String[3];
-			anArray[0] = "Specifications";
-			anArray[1] = "Containers";
-			anArray[2] = "Relationships";
-			System.out.println("--------------------");
-			System.out.println("[itf_database] QoS Database Summary");
-			
-			stmt = conn.createStatement();
-			// create table1 and table2
-			String get_spec_info = "SELECT * FROM Specifications;";
-			
-			stmt.executeUpdate(get_spec_info);
-			
-			System.out.println(get_spec_info);
-			
-			stmt.close();
-			conn.close();
-		} catch (Exception e) {
-			System.out.println(e.getClass().getName() + ": " + e.getMessage());
-			System.exit(-1);
-		}		
 	}
 
 	private boolean db_update_container(ContainerStatus status, boolean update) {
@@ -428,7 +366,7 @@ public class QosManagerTool extends BaseGridTool
 	}
 
 	private void test_db() {
-		db_init();
+	    db_init();
 	    db_summary(false);
 	    db_summary(true);
 
@@ -641,6 +579,44 @@ public class QosManagerTool extends BaseGridTool
 	/**************************************************************************
 	 *  QoS Scheduler
 	 **************************************************************************/
+	// Get client QoS spec from a genii path
+	QosSpec read_spec_file(String spec_path) {
+		char[] data = new char[ByteIOConstants.PREFERRED_SIMPLE_XFER_BLOCK_SIZE];
+		int read;
+		InputStream in = null;
+		InputStreamReader reader = null;
+		String spec_str = "";
+		QosSpec spec = null;
+
+		try {
+			GeniiPath path = new GeniiPath(spec_path);
+			in = path.openInputStream();
+			reader = new InputStreamReader(in);
+
+			while ((read = reader.read(data, 0, data.length)) > 0) {
+				String s = new String(data, 0, read);
+				spec_str += s;
+			}
+		} catch (IOException e) {
+			System.out.println(e.toString());
+			spec_str = "";
+		} finally {
+			StreamUtils.close(reader);
+			StreamUtils.close(in);
+		}
+
+		if (spec_str != "") {
+			spec = new QosSpec();
+			boolean succ = spec.parse_string(spec_str);
+			if (succ) {
+				System.out.println("(qos-manager) Get QoS specs from " + spec_path);
+				return spec;
+			}
+		}
+		
+		System.out.println("(qos-manager) Fail to get QoS specs from " + spec_path);
+		return null;
+	}
 	// Schedule filter: filter out some single containers
 	boolean schedule_filter(QosSpec spec, ContainerStatus status) {
 		if (status.ContainerAvailability <= 0) return false;
@@ -652,7 +628,14 @@ public class QosManagerTool extends BaseGridTool
 		return true;
 	}
 	// return a list of scheduled container ids
-	private List<String> schedule(QosSpec spec) {
+	public List<String> schedule(String spec_path, String spec_id) {
+		assert(spec_path == null && spec_id != null || spec_path != null && spec_id == null);
+		QosSpec spec = null;
+		if (spec_path != null) {
+			spec = read_spec_file(spec_path);
+		} else {
+			spec = db_get_spec(spec_id);
+		}
 		List<String> scheduled_containers = new ArrayList<String>();
 		List<String> container_ids = db_get_container_id_list();
 		List<ContainerStatus> status_list = new ArrayList<ContainerStatus>();
@@ -736,5 +719,99 @@ public class QosManagerTool extends BaseGridTool
 			System.out.printf("Cost: $%.2f/month", cost);
 		}
 		return scheduled_containers;
+	}
+	
+	
+	/**************************************************************************
+	 *  QoS Monitors
+	 **************************************************************************/
+	// Get container status from a genii path
+	ContainerStatus read_status_file(String status_path) {
+		char[] data = new char[ByteIOConstants.PREFERRED_SIMPLE_XFER_BLOCK_SIZE];
+		int read;
+		InputStream in = null;
+		InputStreamReader reader = null;
+		String status_str = "";
+		ContainerStatus status = null;
+
+		try {
+			GeniiPath path = new GeniiPath(status_path);
+			in = path.openInputStream();
+			reader = new InputStreamReader(in);
+
+			while ((read = reader.read(data, 0, data.length)) > 0) {
+				String s = new String(data, 0, read);
+				status_str += s;
+			}
+		} catch (IOException e) {
+			System.out.println(e.toString());
+			status_str = "";
+		} finally {
+			StreamUtils.close(reader);
+			StreamUtils.close(in);
+		}
+
+		if (status_str != "") {
+			status = new ContainerStatus();
+			boolean succ = status.parse_string(status_str);
+			if (succ) {
+				System.out.println("(qos-manager) Get container status from " + status_path);
+				return status;
+			}
+		}
+		
+		System.out.println("(qos-manager) Fail to get container status from " + status_path);
+		return null;
+	}
+	// Monitor a qos spec
+	private boolean monitor_spec(String spec_id) {
+		List<String> container_ids = db_get_container_ids_for_spec(spec_id);
+		QosSpec spec = db_get_spec(spec_id);
+		List<ContainerStatus> status_list = new ArrayList<ContainerStatus>();
+		for (int i = 0; i < container_ids.size(); i++) {
+			status_list.add(db_get_status(container_ids.get(i)));
+		}
+		boolean satisfied = check_all(spec, status_list);
+		if (!satisfied) {
+			// reschedule
+			List<String> rescheduled = schedule(null, spec_id);
+			db_add_scheduled_spec(spec, rescheduled, false); //update
+		}
+		return true;
+	}
+	// Monitor qos specs related to a container
+	private boolean monitor_specs_on_container(String container_id) {
+		List<String> spec_ids = db_get_spec_ids_on_container(container_id);
+		for (int i = 0; i < spec_ids.size(); i++) {
+			monitor_spec(spec_ids.get(i));
+		}
+		return true;
+	}
+	// Update status of a container to qos database
+	private boolean monitor_container(String container_id) {
+		ContainerStatus status_in_db = db_get_status(container_id);
+		assert(status_in_db != null);
+		ContainerStatus status_remote = read_status_file(status_in_db.StatusPath);
+		if (status_remote == null) {
+			System.out.println("[Container Monitor] Container " + container_id + 
+					" is not available.");
+			// TODO: update database and reschedule
+		} else {
+			// Avoid overwriting the reserved size (container doesn't know this)
+			status_remote.StorageReserved = status_in_db.StorageReserved;
+			db_update_container(status_remote, false);
+			// Call QoS Monitor
+			System.out.println("[Container Monitor] Call QoS Monitor for " + container_id);
+			monitor_specs_on_container(container_id);
+		}
+		return true;
+	}
+	// Monitor all containers in the qos database.
+	private boolean monitor_all() {
+		List<String> container_ids = db_get_container_id_list();
+		for (int i = 0; i < container_ids.size(); i++) {
+			monitor_container(container_ids.get(i));
+		}
+		return true;
 	}
 }

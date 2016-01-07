@@ -91,7 +91,7 @@ public class CopyMachine
 			try {
 				ArrayList<String> dirs = new ArrayList<String>();
 				dirs.add(_target);
-				int worked = MkdirTool.makeDirectory(false, null, null, null, dirs, _stderr);
+				int worked = MkdirTool.makeDirectory(false, null, null, dirs, _stderr);
 				if (worked != 0) {
 					_logger.error("failed to make directory in target of " + targetCheck);
 					return PathOutcome.OUTCOME_NO_ACCESS;
@@ -281,7 +281,7 @@ public class CopyMachine
 			ArrayList<String> files = new ArrayList<String>(0);
 			files.add(parent._currentTarget);
 			try {
-				int worked = MkdirTool.makeDirectory(false, null, null, null, files, parent._stderr);
+				int worked = MkdirTool.makeDirectory(false, null, null, files, parent._stderr);
 				if (worked != 0) {
 					_logger.error("failed to make directory in target of " + parent._currentTarget);
 					return PathOutcome.OUTCOME_NO_ACCESS;
