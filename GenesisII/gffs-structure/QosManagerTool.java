@@ -9,8 +9,6 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.sql.*;
-import org.sqlite.*;
-
 
 import org.morgan.util.io.StreamUtils;
 
@@ -134,6 +132,9 @@ public class QosManagerTool extends BaseGridTool
 	{
 	}
 
+	/**************************************************************************
+	 *  QoS Specifications
+	 **************************************************************************/
 	private class QosSpec
 	{
         public String SpecId = "";     			// (str) a unique string
@@ -188,6 +189,9 @@ public class QosManagerTool extends BaseGridTool
 		}
 	}
 	
+	/**************************************************************************
+	 *  Container Status
+	 **************************************************************************/
 	private class ContainerStatus
 	{
         public String ContainerId = "";         // (str) a unique string
@@ -265,6 +269,9 @@ public class QosManagerTool extends BaseGridTool
 		}
 	}
 
+	/**************************************************************************
+	 *  QoS Manager
+	 **************************************************************************/
 	public void qos_manager(String arg) throws IOException
 	{
 		System.out.println("(qos-manager) Main entry.");
@@ -304,7 +311,9 @@ public class QosManagerTool extends BaseGridTool
 		}
 	}
 	
-	/* QoS database interfaces */	
+	/**************************************************************************
+	 *  QoS Database Interfaces
+	 **************************************************************************/
 	private void db_destroy() {
 		File dbFile = new File(this.QOSDBName);
 	    dbFile.delete();
