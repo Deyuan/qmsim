@@ -589,22 +589,25 @@ public class QosManagerTool extends BaseGridTool
 			stmt = conn.createStatement();
 
 			assert (status != null);
-			String status_sql_str = status.to_sql_string();
-
+			
 			// TODO: check existence
 			if (init) {
 				// Insert new container
 				System.out.println("(qm) db: Insert status of container: " + status.ContainerId);
-
+				String status_sql_str = status.to_sql_string();
 				String sql = "INSERT INTO Containers VALUES (" + status_sql_str + ");";
 				stmt.executeUpdate(sql);
 			} else {
 				// Update existing container
 				System.out.println("(qm) db: Update status of container: " + status.ContainerId);
-
+				
+				String sql_storagereserved = "SELECT StorageReserved FROM Containers WHERE ContainerId = '" + status.ContainerId + "';";
+				ResultSet rs_reserved = stmt.executeQuery(sql_storagereserved);
+				status.StorageReserved = rs_reserved.getInt(1);
+				
 				String sql = "DELETE FROM Containers WHERE ContainerId = '" + status.ContainerId + "';";
 				stmt.executeUpdate(sql);
-
+				String status_sql_str = status.to_sql_string();
 				sql = "INSERT INTO Containers VALUES (" + status_sql_str + ");";
 				stmt.executeUpdate(sql);
 			}
