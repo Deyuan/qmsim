@@ -339,57 +339,406 @@ public class QosManagerTool extends BaseGridTool
 		return false;
 	}
 
-	private void db_summary(boolean verbose) {
-		System.out.println("(qos_manager) NYI.");
-		
+	private void db_summary(boolean verbose) {		
 		Connection conn = null;
 		Statement stmt = null;
 		try{
 			Class.forName("org.sqlite.JDBC");
 			conn = DriverManager.getConnection("jdbc:sqlite:"+this.QOSDBName);
 			
-			String[] anArray;
-			anArray = new String[3];
-			anArray[0] = "Specifications";
-			anArray[1] = "Containers";
-			anArray[2] = "Relationships";
+			if (verbose == true){
 			System.out.println("--------------------");
-			System.out.println("[itf_database] QoS Database Summary");
-			
+			System.out.println("[itf_database] QoS Database Summary -verbose");
+
 			stmt = conn.createStatement();
-			// create table1 and table2
+			
+			System.out.println("[itf_database] Specifications Summary");
 			String get_spec_info = "SELECT * FROM Specifications;";
 			
-			stmt.executeUpdate(get_spec_info);
+			ResultSet rs_spec = stmt.executeQuery(get_spec_info);
+			ResultSetMetaData rsmd_spec = rs_spec.getMetaData();
 			
-			System.out.println(get_spec_info);
+		    System.out.println("");
+		  
+		    int numberOfColumns_spec = rsmd_spec.getColumnCount();
+		  
+		    for (int i = 1; i <= numberOfColumns_spec; i++) {
+		      if (i > 1) System.out.print(",  ");
+		      String columnName_spec = rsmd_spec.getColumnName(i);
+		      System.out.print(columnName_spec);
+		    }
+		    System.out.println("");
+		  
+		    while (rs_spec.next()) {
+		      for (int i = 1; i <= numberOfColumns_spec; i++) {
+		        if (i > 1) System.out.print(",  ");
+		        String columnValue_spec = rs_spec.getString(i);
+		        System.out.print(columnValue_spec);
+		      }
+		      System.out.println("");  
+		    }
 			
+		    System.out.println("[itf_database] Containers Summary");
+			String get_container_info = "SELECT * FROM Containers;";
+			
+			ResultSet rs_container = stmt.executeQuery(get_container_info);
+			ResultSetMetaData rsmd_container = rs_container.getMetaData();
+			
+		    System.out.println("");
+		  
+		    int numberOfColumns_container = rsmd_container.getColumnCount();
+		  
+		    for (int i = 1; i <= numberOfColumns_container; i++) {
+		      if (i > 1) System.out.print(",  ");
+		      String columnName_container = rsmd_container.getColumnName(i);
+		      System.out.print(columnName_container);
+		    }
+		    System.out.println("");
+		  
+		    while (rs_container.next()) {
+		      for (int i = 1; i <= numberOfColumns_container; i++) {
+		        if (i > 1) System.out.print(",  ");
+		        String columnValue_container = rs_container.getString(i);
+		        System.out.print(columnValue_container);
+		      }
+		      System.out.println("");  
+		    }
+		    
+		    System.out.println("[itf_database] Relationships Summary");
+			String get_relationship_info = "SELECT * FROM Relationships;";
+			
+			ResultSet rs_relationship = stmt.executeQuery(get_relationship_info);
+			ResultSetMetaData rsmd_relationship = rs_container.getMetaData();
+			
+		    System.out.println("");
+		  
+		    int numberOfColumns_relationship = rsmd_relationship.getColumnCount();
+		  
+		    for (int i = 1; i <= numberOfColumns_relationship; i++) {
+		      if (i > 1) System.out.print(",  ");
+		      String columnName_relationship = rsmd_relationship.getColumnName(i);
+		      System.out.print(columnName_relationship);
+		    }
+		    System.out.println("");
+		  
+		    while (rs_relationship.next()) {
+		      for (int i = 1; i <= numberOfColumns_relationship; i++) {
+		        if (i > 1) System.out.print(",  ");
+		        String columnValue_relationship = rs_relationship.getString(i);
+		        System.out.print(columnValue_relationship);
+		      }
+		      System.out.println("");  
+		    }
+			}
+			
+			if (verbose == false){
+				System.out.println("--------------------");
+				System.out.println("[itf_database] QoS Database Summary");
+
+				stmt = conn.createStatement();
+				
+				System.out.println("[itf_database] Specifications Summary");
+				String get_spec_info = "SELECT SpecId FROM Specifications;";
+				
+				ResultSet rs_spec = stmt.executeQuery(get_spec_info);
+				ResultSetMetaData rsmd_spec = rs_spec.getMetaData();
+				
+			    System.out.println("");
+			  
+			    int numberOfColumns_spec = rsmd_spec.getColumnCount();
+			  
+			    for (int i = 1; i <= numberOfColumns_spec; i++) {
+			      if (i > 1) System.out.print(",  ");
+			      String columnName_spec = rsmd_spec.getColumnName(i);
+			      System.out.print(columnName_spec);
+			    }
+			    System.out.println("");
+			  
+			    while (rs_spec.next()) {
+			      for (int i = 1; i <= numberOfColumns_spec; i++) {
+			        if (i > 1) System.out.print(",  ");
+			        String columnValue_spec = rs_spec.getString(i);
+			        System.out.print(columnValue_spec);
+			      }
+			      System.out.println("");  
+			    }
+				
+			    System.out.println("[itf_database] Containers Summary");
+				String get_container_info = "SELECT ContainerId FROM Containers;";
+				
+				ResultSet rs_container = stmt.executeQuery(get_container_info);
+				ResultSetMetaData rsmd_container = rs_container.getMetaData();
+				
+			    System.out.println("");
+			  
+			    int numberOfColumns_container = rsmd_container.getColumnCount();
+			  
+			    for (int i = 1; i <= numberOfColumns_container; i++) {
+			      if (i > 1) System.out.print(",  ");
+			      String columnName_container = rsmd_container.getColumnName(i);
+			      System.out.print(columnName_container);
+			    }
+			    System.out.println("");
+			  
+			    while (rs_container.next()) {
+			      for (int i = 1; i <= numberOfColumns_container; i++) {
+			        if (i > 1) System.out.print(",  ");
+			        String columnValue_container = rs_container.getString(i);
+			        System.out.print(columnValue_container);
+			      }
+			      System.out.println("");  
+			    }
+			    
+			    System.out.println("[itf_database] Relationships Summary");
+				String get_relationship_info = "SELECT * FROM Relationships;";
+				
+				ResultSet rs_relationship = stmt.executeQuery(get_relationship_info);
+				ResultSetMetaData rsmd_relationship = rs_container.getMetaData();
+				
+			    System.out.println("");
+			  
+			    int numberOfColumns_relationship = rsmd_relationship.getColumnCount();
+			  
+			    for (int i = 1; i <= numberOfColumns_relationship; i++) {
+			      if (i > 1) System.out.print(",  ");
+			      String columnName_relationship = rsmd_relationship.getColumnName(i);
+			      System.out.print(columnName_relationship);
+			    }
+			    System.out.println("");
+			  
+			    while (rs_relationship.next()) {
+			      for (int i = 1; i <= numberOfColumns_relationship; i++) {
+			        if (i > 1) System.out.print(",  ");
+			        String columnValue_relationship = rs_relationship.getString(i);
+			        System.out.print(columnValue_relationship);
+			      }
+			      System.out.println("");  
+			    }
+				}
+		    
+		   
 			stmt.close();
 			conn.close();
+			
+			System.out.println("--------------------");
 		} catch (Exception e) {
 			System.out.println(e.getClass().getName() + ": " + e.getMessage());
 			System.exit(-1);
 		}		
 	}
 
-	private boolean db_update_container(ContainerStatus status, boolean update) {
-		System.out.println("(qos_manager) NYI.");
+	private boolean db_update_container(ContainerStatus status, boolean update) {				
+		Connection conn = null;
+		Statement stmt = null;
+		try{
+			Class.forName("org.sqlite.JDBC");
+			conn = DriverManager.getConnection("jdbc:sqlite:"+this.QOSDBName);
+			stmt = conn.createStatement();
+
+			//System.out.println(find_container);
+			
+			if (update){
+				//insert new container
+				String insert_new_container = "INSERT INTO Containers VALUES (" + "'" + status.ContainerId + "'," + status.StorageTotal 
+						+ "," + "'" + status.PathToSwitch + "',"+ status.CoresAvailable + "," + status.StorageRBW  + "," + status.StorageWBW  + "," 
+						+ status.StorageRLatency  + "," + status.StorageWLatency  + "," + status.StorageRAIDLevel  + "," 
+						+ status.CostPerGBMonth  + "," + status.DataIntegrity  + "," + status.StorageReserved  + "," + status.StorageUsed  + ","
+						+ status.StorageReliability  + "," + status.ContainerAvailability  + ","
+						+ status.StorageRBW_dyn  + "," + status.StorageWBW_dyn  + "," + "'" + status.PhysicalLocation  + "',"
+						+ "'" + status.NetworkAddress  + "',"+ "'" + status.StatusPath + "');";
+				//System.out.println(insert_new_container);
+				stmt.executeUpdate(insert_new_container);
+			}
+			else{
+				//update existing container
+				String delete_existing_container = "DELETE FROM Containers WHERE ContainerId = '" + status.ContainerId + "';";
+				//System.out.println(delete_existing_container);
+				stmt.executeUpdate(delete_existing_container);
+		
+				String insert_new_container = "INSERT INTO Containers VALUES (" + "'" + status.ContainerId + "'," + status.StorageTotal 
+						+ "," + "'" + status.PathToSwitch + "',"+ status.CoresAvailable + "," + status.StorageRBW  + "," + status.StorageWBW  + "," 
+						+ status.StorageRLatency  + "," + status.StorageWLatency  + "," + status.StorageRAIDLevel  + "," 
+						+ status.CostPerGBMonth  + "," + status.DataIntegrity  + "," + status.StorageReserved  + "," + status.StorageUsed  + ","
+						+ status.StorageReliability  + "," + status.ContainerAvailability  + ","
+						+ status.StorageRBW_dyn  + "," + status.StorageWBW_dyn  + "," + "'" + status.PhysicalLocation  + "',"
+						+ "'" + status.NetworkAddress  + "',"+ "'" + status.StatusPath + "');";
+				//System.out.println(insert_new_container);
+				stmt.executeUpdate(insert_new_container);
+			}
+				
+			stmt.close();
+			conn.close();
+			return true;
+		} catch (Exception e) {
+			System.out.println(e.getClass().getName() + ": " + e.getMessage());
+			System.exit(-1);
+		}
 		return false;
 	}
 	
 	private boolean db_add_scheduled_spec(QosSpec spec,
 			List<String> scheduled_container_ids, boolean init) {
-		System.out.println("(qos_manager) NYI.");
+		System.out.println("(qos_manager) add scheduled spec.");
+		Connection conn = null;
+		Statement stmt = null;
+		try{
+			Class.forName("org.sqlite.JDBC");
+			conn = DriverManager.getConnection("jdbc:sqlite:"+this.QOSDBName);
+			stmt = conn.createStatement();
+
+			if (init){
+				//insert new spec
+				String insert_new_scheduled_spec_specifications = "INSERT INTO Specifications VALUES (" + "'" + spec.SpecId + "'," + spec.Availability 
+						+ "," + spec.Reliability + "," + spec.ReservedSize  + "," + spec.UsedSize  + "," 
+						+ spec.DataIntegrity  + "," + "'" + spec.Bandwidth  + "'," + "'" + spec.Latency  + "'," 
+						+ "'" + spec.PhysicalLocations  + "'," + "'" + spec.SpecPath + "');";
+				stmt.executeUpdate(insert_new_scheduled_spec_specifications);
+				
+				for(int i = 0;i<scheduled_container_ids.size();i++){
+				
+				String insert_new_scheduled_spec = "INSERT INTO Relationships VALUES (" + "'" + spec.SpecId + "'," + "'" 
+						+ scheduled_container_ids.get(i) + "');";
+				System.out.println(insert_new_scheduled_spec);
+				stmt.executeUpdate(insert_new_scheduled_spec);
+				}
+			}
+			else{
+				//update existing spec
+				String delete_existing_spec = "DELETE FROM Relationships WHERE SpecId = '" + spec.SpecId + "';";
+				System.out.println(delete_existing_spec);
+				stmt.executeUpdate(delete_existing_spec);
+				
+				String delete_existing_spec_from_specifications = "DELETE FROM Specifications WHERE SpecId = '" + spec.SpecId + "';";
+				//System.out.println(delete_existing_spec_from_specifications);
+				stmt.executeUpdate(delete_existing_spec_from_specifications);
+
+				String insert_new_scheduled_spec_specifications = "INSERT INTO Specifications VALUES (" + "'" + spec.SpecId + "'," + spec.Availability 
+						+ "," + spec.Reliability + "," + spec.ReservedSize  + "," + spec.UsedSize  + "," 
+						+ spec.DataIntegrity  + "," + "'" + spec.Bandwidth  + "'," + "'" + spec.Latency  + "'," 
+						+ "'" + spec.PhysicalLocations  + "'," + "'" + spec.SpecPath + "');";
+				stmt.executeUpdate(insert_new_scheduled_spec_specifications);
+				
+				for(int i = 0;i<scheduled_container_ids.size();i++){
+						String insert_new_scheduled_spec = "INSERT INTO Relationships VALUES (" + "'" + spec.SpecId + "'," + "'" 
+							+ scheduled_container_ids.get(i) + "');";
+					//System.out.println(insert_new_scheduled_spec);
+					stmt.executeUpdate(insert_new_scheduled_spec);
+					}				
+			}
+				
+			stmt.close();
+			conn.close();
+			return true;
+		}
+			catch (Exception e) {
+				System.out.println(e.getClass().getName() + ": " + e.getMessage());
+				System.exit(-1);
+			}
+		
 		return false;
 	}
 
 	private boolean db_remove_spec(String spec_id) {
-		System.out.println("(qos_manager) NYI.");
+		System.out.println("(qos_manager) db_remove_spec.");
+		Connection conn = null;
+		Statement stmt = null;
+
+		try{
+			Class.forName("org.sqlite.JDBC");
+			conn = DriverManager.getConnection("jdbc:sqlite:"+this.QOSDBName);
+			stmt = conn.createStatement();
+			
+			String find_spec = "SELECT * FROM Specifications WHERE SpecId = '" + spec_id + "';";
+			
+			ResultSet rs = stmt.executeQuery(find_spec);
+			ResultSetMetaData rsmd = rs.getMetaData();
+			
+			if(rs.next()){
+//				System.out.println("!!!!!!!!!!!!");
+				int reserved = rs.getInt(4);
+				//System.out.print(reserved);
+				String find_containers = "SELECT * FROM Relationships WHERE SpecId = '" + spec_id + "';";
+				//System.out.println(find_containers);
+				
+				ResultSet rs_container = stmt.executeQuery(find_containers);
+				ResultSetMetaData rsmd_container = rs_container.getMetaData();	
+				
+				List<String> container_list = new ArrayList<String>();
+			  
+			    while (rs_container.next()) {
+			      container_list.add(rs_container.getString(2));
+			    }
+				
+			    for(int i = 0;i < container_list.size();i++){
+			    	String get_container = "SELECT * FROM Containers WHERE ContainerId = '" + container_list.get(0) + "';";
+			    	ResultSet rs_related_container = stmt.executeQuery(get_container);
+			    	ResultSetMetaData rsmd_related_container = rs_related_container.getMetaData();
+			    	int storage_reserved = rs.getInt(12); 
+//			    	System.out.println(container_list.get(i));
+			    	int new_reserved_size = storage_reserved - reserved;
+			    	String update_reserved_size= "UPDATE Containers SET StorageReserved = " + new_reserved_size 
+			    			+ " WHERE ContainerId =" + "'" + container_list.get(i) +"';";
+//			    	System.out.println(update_reserved_size);
+			    	stmt.executeUpdate(update_reserved_size);
+			    }
+			    
+				String delete_from_specifications = "DELETE FROM Specifications WHERE SpecId = '" + spec_id + "';"; 
+				stmt.executeUpdate(delete_from_specifications);
+				String delete_from_relationships = "DELETE FROM Relationships WHERE SpecId = '" + spec_id + "';"; 
+				stmt.executeUpdate(delete_from_relationships);
+				
+			}
+			
+			stmt.close();
+			conn.close();
+			return true;
+		} catch (Exception e) {
+			System.out.println(e.getClass().getName() + ": " + e.getMessage());
+			System.exit(-1);
+		}
 		return false;
 	}
 
 	private boolean db_remove_container(String container_id) {
-		System.out.println("(qos_manager) NYI.");
+		System.out.println("(qos_manager) Remove Container");
+		Connection conn = null;
+		Statement stmt = null;
+
+		try{
+			Class.forName("org.sqlite.JDBC");
+			conn = DriverManager.getConnection("jdbc:sqlite:"+this.QOSDBName);
+			stmt = conn.createStatement();
+			
+			String find_container = "SELECT * FROM Containers WHERE ContainerId = '" + container_id + "';";
+			
+			ResultSet rs = stmt.executeQuery(find_container);
+			//ResultSetMetaData rsmd = rs.getMetaData();
+			
+			if(rs.next()){
+//				System.out.println("!!!!!!!!!!!!");
+
+				String find_specs = "SELECT * FROM Relationships WHERE ContainerId = '" + container_id + "';";
+				//System.out.println(find_containers);
+				
+				ResultSet rs_specs = stmt.executeQuery(find_specs);
+				//ResultSetMetaData rsmd_spec = rs_specs.getMetaData();	
+				
+				if(rs_specs.next()){
+					System.out.println("(itf_database) ERROR: specification on container are not rescheduled.");
+					return false;
+				}
+			    
+				String delete_from_containers = "DELETE FROM Containers WHERE ContainerId = '" + container_id + "';"; 
+				stmt.executeUpdate(delete_from_containers);				
+			}
+			
+			stmt.close();
+			conn.close();
+			return true;
+		} catch (Exception e) {
+			System.out.println(e.getClass().getName() + ": " + e.getMessage());
+			System.exit(-1);
+		}
 		return false;
 	}
 
