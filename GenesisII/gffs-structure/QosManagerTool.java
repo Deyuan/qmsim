@@ -53,8 +53,9 @@ public class QosManagerTool extends BaseGridTool
 	private boolean _monitor = false;
 	private boolean _test = false;
 
-	private String QOSDBPath = "/home/dg/database/";
-	private String QOSDBName = QOSDBPath + "qos.db";
+	private String _gridHomeDir = null;
+	private String _localUserDir = null;
+	private String _qosDbName = "qos.db";
 
 	public QosManagerTool()
 	{
@@ -494,69 +495,114 @@ public class QosManagerTool extends BaseGridTool
 		if (_spec_id_to_schedule != null) {
 			System.out.println("(qm) main: Schedule a QoS specs id "
 					+ _spec_id_to_schedule);
+			db_sync_down();
 			schedule(null, _spec_id_to_schedule);
+			db_sync_up();
 		} else if (_spec_id_to_remove != null) {
 			System.out.println("(qm) main: Remove a QoS specs id "
 					+ _spec_id_to_remove);
+			db_sync_down();
 			db_remove_spec(_spec_id_to_remove);
+			db_sync_up();
 		} else if (_status_path_to_add != null) {
 			System.out.println("(qm) main: Add a container with status file at "
 					+ _status_path_to_add);
 			ContainerStatus status = new ContainerStatus();
 			boolean succ = status.read_from_file(_status_path_to_add);
 			if (succ) {
+				db_sync_down();
 				db_update_container(status, true); // init
+				db_sync_up();
 			}
 		} else if (_container_id_to_remove != null) {
 			System.out.println("(qm) main: Remove container id "
 					+ _container_id_to_remove);
+			db_sync_down();
 			db_remove_container(_container_id_to_remove);
+			db_sync_up();
 		} else if (_show_db) {
 			System.out.println("(qm) main: Show information of the QoS database.");
+			db_sync_down();
 			db_summary(false);
 		} else if (_show_db_verbose) {
 			System.out.println("(qm) main: Show details of the QoS database.");
+			db_sync_down();
 			db_summary(true);
 		} else if (_init_db) {
 			System.out.println("(qm) main: Initialize the QoS database.");
 			db_init();
+			db_sync_up();
 		} else if (_monitor) {
 			System.out.println("(qm) main: Monitor container status and specs.");
+			db_sync_down();
 			monitor_all();
+			db_sync_up();
 		} else if (_test) {
 			System.out.println("(qm) internal: Test the QoS manager.");
+			db_sync_down();
 			test_db();
+			db_sync_up();
 		} else {
-			System.out.println("(qm) main: Please run 'help qos-manager' for usable options.");
+			System.out.println("(qm) main: Please run 'man qos-manager' for usable options.");
 		}
 	}
 
 	/**************************************************************************
 	 *  QoS Database Interfaces
 	 **************************************************************************/
+	private String db_grid_path() {
+		if (this._gridHomeDir == null) {
+			// TODO: get real grid home directory
+			this._gridHomeDir = "/home/xcg.virginia.edu/dg7vp";
+		}
+		return this._gridHomeDir + "/" + this._qosDbName;
+	}
+
+	private String db_local_path() {
+		if (this._localUserDir == null) {
+			// TODO: get real user directory
+			this._localUserDir = "/home/dg/database";
+		}
+		return this._localUserDir + "/" + this._qosDbName;
+	}
+
+	private boolean db_sync_down() {
+		// TODO: Copy from grid to local
+		System.out.println("(qm) db: Sync from grid to local.");
+		return false;
+	}
+
+	private boolean db_sync_up() {
+		// TODO: Copy from local to grid
+		System.out.println("(qm) db: Sync from local to grid.");
+		return false;
+	}
+
 	private void db_destroy() {
-		File dbFile = new File(this.QOSDBName);
-		dbFile.delete();
+		File dbFile = new File(db_grid_path());
+		if (dbFile.exists()) {
+			dbFile.delete();
+		}
+		dbFile = new File(db_local_path());
+		if (dbFile.exists()) {
+			dbFile.delete();
+		}
 	}
 
 	private boolean db_init() {
-		ContainerStatus status = new ContainerStatus();
-		QosSpec spec = new QosSpec();
-		// if exists
-		File dbFile = new File(this.QOSDBName);
+		db_destroy();
 
-		if (dbFile.exists()) {
-			db_destroy();
-		}
 		Connection conn = null;
 		Statement stmt = null;
-		try{
+		try {
 			Class.forName("org.sqlite.JDBC");
-			conn = DriverManager.getConnection("jdbc:sqlite:" + this.QOSDBName);
+			conn = DriverManager.getConnection("jdbc:sqlite:" + db_local_path());
 			System.out.println("(qm) db: Connect to QoS DB successfully.");
 			stmt = conn.createStatement();
-			// create table1 and table2
+
+			QosSpec spec = new QosSpec();
 			String create_spec_table = "CREATE TABLE" + spec.get_sql_header();
+			ContainerStatus status = new ContainerStatus();
 			String create_status_table = "CREATE TABLE" + status.get_sql_header();
 
 			stmt.executeUpdate(create_spec_table);
@@ -569,7 +615,6 @@ public class QosManagerTool extends BaseGridTool
 			return true;
 		} catch (Exception e) {
 			System.out.println(e.getClass().getName() + ": " + e.getMessage());
-			System.exit(-1);
 		}
 		return false;
 	}
@@ -579,7 +624,7 @@ public class QosManagerTool extends BaseGridTool
 		Statement stmt = null;
 		try {
 			Class.forName("org.sqlite.JDBC");
-			conn = DriverManager.getConnection("jdbc:sqlite:" + this.QOSDBName);
+			conn = DriverManager.getConnection("jdbc:sqlite:" + db_local_path());
 
 			if (verbose == true) {
 				System.out.println("----------------------------------------");
@@ -677,7 +722,7 @@ public class QosManagerTool extends BaseGridTool
 				String sql = "SELECT SpecId FROM Specifications;";
 				ResultSet rs_spec = stmt.executeQuery(sql);
 
-				System.out.print("     Specifications:\t");
+				System.out.print("  ** SPECIFICATIONS:\t");
 				while (rs_spec.next()) {
 					String columnValue_spec = rs_spec.getString(1);
 					System.out.print(" " + columnValue_spec + ";");
@@ -687,7 +732,7 @@ public class QosManagerTool extends BaseGridTool
 				sql = "SELECT ContainerId FROM Containers;";
 				ResultSet rs_container = stmt.executeQuery(sql);
 
-				System.out.print("     Containers:\t");
+				System.out.print("  ** CONTAINERS:\t");
 				while (rs_container.next()) {
 					String columnValue_container = rs_container.getString(1);
 					System.out.print(" " + columnValue_container + ";");
@@ -697,7 +742,7 @@ public class QosManagerTool extends BaseGridTool
 				sql = "SELECT * FROM Relationships;";
 				ResultSet rs_relationship = stmt.executeQuery(sql);
 
-				System.out.print("     Relationships:\t");
+				System.out.print("  ** RELATIONSHIPS:\t");
 				while (rs_relationship.next()) {
 					String spec_id = rs_relationship.getString(1);
 					String container_id = rs_relationship.getString(2);
@@ -712,7 +757,6 @@ public class QosManagerTool extends BaseGridTool
 
 		} catch (Exception e) {
 			System.out.println(e.getClass().getName() + ": " + e.getMessage());
-			System.exit(-1);
 		}
 	}
 
@@ -721,7 +765,7 @@ public class QosManagerTool extends BaseGridTool
 		Statement stmt = null;
 		try {
 			Class.forName("org.sqlite.JDBC");
-			conn = DriverManager.getConnection("jdbc:sqlite:"+this.QOSDBName);
+			conn = DriverManager.getConnection("jdbc:sqlite:" + db_local_path());
 			stmt = conn.createStatement();
 
 			assert (status != null);
@@ -769,7 +813,7 @@ public class QosManagerTool extends BaseGridTool
 		// TODO: file copy
 		try {
 			Class.forName("org.sqlite.JDBC");
-			conn = DriverManager.getConnection("jdbc:sqlite:" + this.QOSDBName);
+			conn = DriverManager.getConnection("jdbc:sqlite:" + db_local_path());
 			stmt = conn.createStatement();
 
 			if (init) {
@@ -877,7 +921,7 @@ public class QosManagerTool extends BaseGridTool
 
 		try {
 			Class.forName("org.sqlite.JDBC");
-			conn = DriverManager.getConnection("jdbc:sqlite:" + this.QOSDBName);
+			conn = DriverManager.getConnection("jdbc:sqlite:" + db_local_path());
 			stmt = conn.createStatement();
 
 			String sql = "SELECT ReservedSize FROM Specifications WHERE SpecId = '" + spec_id + "';";
@@ -926,7 +970,7 @@ public class QosManagerTool extends BaseGridTool
 
 		try {
 			Class.forName("org.sqlite.JDBC");
-			conn = DriverManager.getConnection("jdbc:sqlite:" + this.QOSDBName);
+			conn = DriverManager.getConnection("jdbc:sqlite:" + db_local_path());
 			stmt = conn.createStatement();
 
 			String sql = "SELECT * FROM Containers WHERE ContainerId = '" + container_id + "';";
@@ -963,7 +1007,7 @@ public class QosManagerTool extends BaseGridTool
 
 		try {
 			Class.forName("org.sqlite.JDBC");
-			conn = DriverManager.getConnection("jdbc:sqlite:" + this.QOSDBName);
+			conn = DriverManager.getConnection("jdbc:sqlite:" + db_local_path());
 			stmt = conn.createStatement();
 
 			String sql = "SELECT ContainerId FROM Relationships WHERE SpecId = '" + spec_id + "';";
@@ -989,7 +1033,7 @@ public class QosManagerTool extends BaseGridTool
 
 		try {
 			Class.forName("org.sqlite.JDBC");
-			conn = DriverManager.getConnection("jdbc:sqlite:" + this.QOSDBName);
+			conn = DriverManager.getConnection("jdbc:sqlite:" + db_local_path());
 			stmt = conn.createStatement();
 
 			String sql = "SELECT SpecId FROM Relationships WHERE ContainerId = '" + container_id + "';";
@@ -1015,7 +1059,7 @@ public class QosManagerTool extends BaseGridTool
 
 		try {
 			Class.forName("org.sqlite.JDBC");
-			conn = DriverManager.getConnection("jdbc:sqlite:" + this.QOSDBName);
+			conn = DriverManager.getConnection("jdbc:sqlite:" + db_local_path());
 			stmt = conn.createStatement();
 
 			String sql = "SELECT ContainerId From Containers;";
@@ -1041,7 +1085,7 @@ public class QosManagerTool extends BaseGridTool
 
 		try {
 			Class.forName("org.sqlite.JDBC");
-			conn = DriverManager.getConnection("jdbc:sqlite:" + this.QOSDBName);
+			conn = DriverManager.getConnection("jdbc:sqlite:" + db_local_path());
 			stmt = conn.createStatement();
 
 			String sql = "SELECT SpecId From Specifications;";
@@ -1067,7 +1111,7 @@ public class QosManagerTool extends BaseGridTool
 
 		try {
 			Class.forName("org.sqlite.JDBC");
-			conn = DriverManager.getConnection("jdbc:sqlite:" + this.QOSDBName);
+			conn = DriverManager.getConnection("jdbc:sqlite:" + db_local_path());
 			stmt = conn.createStatement();
 
 			String sql = "SELECT * FROM Containers WHERE ContainerId = '" + container_id + "';";
@@ -1093,7 +1137,7 @@ public class QosManagerTool extends BaseGridTool
 
 		try {
 			Class.forName("org.sqlite.JDBC");
-			conn = DriverManager.getConnection("jdbc:sqlite:" + this.QOSDBName);
+			conn = DriverManager.getConnection("jdbc:sqlite:" + db_local_path());
 			stmt = conn.createStatement();
 
 			String sql = "SELECT * FROM Specifications WHERE SpecId = '" + spec_id + "';";
