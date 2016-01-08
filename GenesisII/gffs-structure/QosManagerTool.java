@@ -1,3 +1,7 @@
+/* QoS Manager
+ * Authors: Deyuan Guo, Chunkun Bo
+ * January 2016.
+ */
 package edu.virginia.vcgr.genii.client.cmd.tools;
 
 import java.io.File;
@@ -38,16 +42,15 @@ public class QosManagerTool extends BaseGridTool
 		return QosManager;
 	}
 
-	private String _spec_path_to_schedule = null;
 	private String _spec_id_to_schedule = null;
 	private String _spec_id_to_remove = null;
 	private String _status_path_to_add = null;
 	private String _container_id_to_remove = null;
 	private boolean _show_db = false;
 	private boolean _show_db_verbose = false;
-	private boolean _clean_db = false;
+	private boolean _init_db = false;
 	private boolean _monitor = false;
-	private boolean _test_db = false;
+	private boolean _test = false;
 
 	private String QOSDBPath = "/home/dg/database/";
 	private String QOSDBName = QOSDBPath + "qos.db";
@@ -59,14 +62,8 @@ public class QosManagerTool extends BaseGridTool
 		addManPage(new LoadFileResource(_MANPAGE));
 	}
 
-	@Option({ "schedule" })
-	public void set_schedule(String spec_path)
-	{
-		_spec_path_to_schedule = spec_path;
-	}
-
-	@Option({ "schedule-id" })
-	public void set_schedule_id(String spec_id)
+	@Option({ "reschedule" })
+	public void set_reschedule(String spec_id)
 	{
 		_spec_id_to_schedule = spec_id;
 	}
@@ -101,10 +98,10 @@ public class QosManagerTool extends BaseGridTool
 		_show_db_verbose = true;
 	}
 
-	@Option({ "clean-db" })
+	@Option({ "init-db" })
 	public void set_clean_db()
 	{
-		_clean_db = true;
+		_init_db = true;
 	}
 
 	@Option({ "monitor" })
@@ -113,10 +110,10 @@ public class QosManagerTool extends BaseGridTool
 		_monitor = true;
 	}
 
-	@Option({ "test-db" })
+	@Option({ "test" })
 	public void set_test_db()
 	{
-		_test_db = true;
+		_test = true;
 	}
 
 	@Override
@@ -359,14 +356,10 @@ public class QosManagerTool extends BaseGridTool
 	 **************************************************************************/
 	public void qos_manager(String arg) throws IOException
 	{
-		if (_spec_path_to_schedule != null) {
-			System.out.println("(qm) main: Schedule a QoS specs file at "
-					+ _spec_path_to_schedule);
-			schedule(_spec_path_to_schedule, _spec_id_to_schedule);
-		} else if (_spec_id_to_schedule != null) {
+		if (_spec_id_to_schedule != null) {
 			System.out.println("(qm) main: Schedule a QoS specs id "
 					+ _spec_id_to_schedule);
-			schedule(_spec_path_to_schedule, _spec_id_to_schedule);
+			schedule(null, _spec_id_to_schedule);
 		} else if (_spec_id_to_remove != null) {
 			System.out.println("(qm) main: Remove a QoS specs id "
 					+ _spec_id_to_remove);
@@ -386,14 +379,14 @@ public class QosManagerTool extends BaseGridTool
 		} else if (_show_db_verbose) {
 			System.out.println("(qm) main: Show details of the QoS database.");
 			db_summary(true);
-		} else if (_clean_db) {
-			System.out.println("(qm) main: Clean QoS database.");
+		} else if (_init_db) {
+			System.out.println("(qm) main: Initialize the QoS database.");
 			db_init();
 		} else if (_monitor) {
 			System.out.println("(qm) main: Monitor container status and specs.");
 			monitor_all();
-		} else if (_test_db) {
-			System.out.println("(qm) main: Test the QoS database.");
+		} else if (_test) {
+			System.out.println("(qm) internal: Test the QoS manager.");
 			test_db();
 		} else {
 			System.out.println("(qm) main: Please run 'help qos-manager' for usable options.");
@@ -589,7 +582,7 @@ public class QosManagerTool extends BaseGridTool
 			stmt = conn.createStatement();
 
 			assert (status != null);
-			
+
 			// TODO: check existence
 			if (init) {
 				// Insert new container
@@ -600,11 +593,11 @@ public class QosManagerTool extends BaseGridTool
 			} else {
 				// Update existing container
 				System.out.println("(qm) db: Update status of container: " + status.ContainerId);
-				
+
 				String sql_storagereserved = "SELECT StorageReserved FROM Containers WHERE ContainerId = '" + status.ContainerId + "';";
 				ResultSet rs_reserved = stmt.executeQuery(sql_storagereserved);
 				status.StorageReserved = rs_reserved.getInt(1);
-				
+
 				String sql = "DELETE FROM Containers WHERE ContainerId = '" + status.ContainerId + "';";
 				stmt.executeUpdate(sql);
 				String status_sql_str = status.to_sql_string();
@@ -919,28 +912,32 @@ public class QosManagerTool extends BaseGridTool
 	}
 
 	private void test_db() {
+		System.out.println("#### DB Test 0: Show empty QoS database");
 		db_init();
 		db_summary(false);
 		db_summary(true);
 
+		System.out.println("#### DB Test 1: Insert container1 into db");
 		ContainerStatus status = new ContainerStatus();
 		status.ContainerId = "container1";
 		status.NetworkAddress = "//aaa";
 		db_update_container(status, true);
 		db_summary(true);
 
-		//status = new ContainerStatus()
+		System.out.println("#### DB Test 2: Insert container2 into db");
 		status.ContainerId = "container2";
 		status.NetworkAddress = "//bbb";
 		db_update_container(status, true);
 		db_summary(true);
 
-		//status = new ContainerStatus()
+		System.out.println("#### DB Test 3: Update container1 into db");
 		status.ContainerId = "container1";
 		status.NetworkAddress = "//ccc";
 		status.StorageTotal = 1000;
 		db_update_container(status, false);
 		db_summary(true);
+
+		System.out.println("#### DB Test 4: Add a scheduled spec");
 		QosSpec spec = new QosSpec();
 		spec.SpecId = "client1-spec1";
 		List<String> container_list = new ArrayList<String>();
@@ -948,7 +945,7 @@ public class QosManagerTool extends BaseGridTool
 		db_add_scheduled_spec(spec, container_list, true);
 		db_summary(true);
 
-		//spec = new QosSpec();
+		System.out.println("#### DB Test 5: Update a scheduled spec");
 		spec.SpecId = "client1-spec1";
 		container_list.clear();
 		container_list.add("container1");
@@ -956,17 +953,18 @@ public class QosManagerTool extends BaseGridTool
 		db_add_scheduled_spec(spec, container_list, false);
 		db_summary(true);
 
-		//spec = new QosSpec();
+		System.out.println("#### DB Test 6: Update a scheduled spec");
 		spec.SpecId = "client1-spec1";
 		container_list.clear();
 		container_list.add("container2");
 		db_add_scheduled_spec(spec, container_list, false);
 		db_summary(true);
 
+		System.out.println("#### DB Test 7: Remove a spec");
 		db_remove_spec("client1-spec1");
 		db_summary(true);
 
-		//spec = new QosSpec();
+		System.out.println("#### DB Test 8: Add a scheduled spec");
 		spec.SpecId = "client1-spec1";
 		container_list.clear();
 		container_list.add("container1");
@@ -975,18 +973,16 @@ public class QosManagerTool extends BaseGridTool
 		db_summary(false);
 		db_summary(true);
 
+		System.out.println("#### DB Test 9: Get information from db");
 		System.out.println(db_get_container_ids_for_spec("client1-spec1").toString());
 		System.out.println(db_get_spec_ids_on_container("container1").toString());
 		System.out.println(db_get_container_id_list().toString());
 		System.out.println(db_get_spec_id_list().toString());
-		status = db_get_status("container1x");
-		if (status != null)
-			System.out.println("Error");
+		status = db_get_status("xxx");
+		if (status != null) System.out.println("Error");
 		status = db_get_status("container1");
-		if (status != null)
-			System.out.println(status.to_string());
-		else
-			System.out.println("Error");
+		if (status != null) System.out.println(status.to_string());
+		else System.out.println("Error");
 
 		spec = db_get_spec("xxx");
 		if (spec != null) System.out.println("Error");

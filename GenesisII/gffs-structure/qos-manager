@@ -1,10 +1,28 @@
 Description:
-
-A tool for managing the quality of service.
+A tool for managing the quality of service. A user can add some accessible
+containers into the QoS database, and use 'mkdir' to create dynamically
+scheduled folders.
 
 The following options are available:
-
+--init_db
+    Initialize the QoS database. The QoS database will be stored in both the
+    grid home directory and the local user directory.
 --show_db
+    Show summary of the QoS database.
+--show-db-verbose
+    Show details of the QoS database.
+--reschedule=<qos-spec-id>
+    Given a QoS specification id, reschedule its containers.
+--rm-spec=<qos-spec-id>
+    Remove a Qos specification from the QoS database.
+--add-container=<container-status-path>
+    Add a new container to the QoS database.
+--rm-container=<container-id>
+    Remove a container from the QoS database.
+--monitor
+    Monitor all QoS specifications in the QoS database, and reschedule the
+    unsatisfied ones.
 
-Show the summary of QoS database
-
+Related tools:
+mkdir [--specs=<qos-spec-path>]
+    Create a dynamically scheduled folder with a QoS specification file.

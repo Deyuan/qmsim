@@ -1,2 +1,8 @@
-qos-manager [--show_db]
-
+qos-manager [--init-db]
+            [--show-db]
+            [--show-db-verbose]
+            [--reschedule=<qos-spec-id>]
+            [--rm-spec=<qos-spec-id>]
+            [--add-container=<container-status-path>]
+            [--rm-container=<container-id>]
+            [--monitor]
