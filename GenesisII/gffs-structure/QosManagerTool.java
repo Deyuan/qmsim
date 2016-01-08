@@ -770,13 +770,32 @@ public class QosManagerTool extends BaseGridTool
 
 			assert (status != null);
 
-			// TODO: check existence
 			if (init) {
-				// Insert new container
-				System.out.println("(qm) db: Insert status of container: " + status.ContainerId);
-				String status_sql_str = status.to_sql_string();
-				String sql = "INSERT INTO Containers VALUES (" + status_sql_str + ");";
-				stmt.executeUpdate(sql);
+				String sql = "SELECT * FROM Containers WHERE ContainerId = '" + status.ContainerId + "';";
+				ResultSet rs = stmt.executeQuery(sql);
+
+				if (rs.next()) {
+					//container already exists
+					System.out.println("(qm) db: Container: " + status.ContainerId + "already exists.");
+					System.out.println("(qm) db: Update status for " + status.ContainerId);
+					String sql_storagereserved = "SELECT StorageReserved FROM Containers WHERE ContainerId = '" + status.ContainerId + "';";
+					ResultSet rs_reserved = stmt.executeQuery(sql_storagereserved);
+					status.StorageReserved = rs_reserved.getInt(1);
+
+					String sql_delete = "DELETE FROM Containers WHERE ContainerId = '" + status.ContainerId + "';";
+					stmt.executeUpdate(sql_delete);
+					String status_sql_str = status.to_sql_string();
+					sql = "INSERT INTO Containers VALUES (" + status_sql_str + ");";
+					stmt.executeUpdate(sql);
+					
+				}
+				else{
+					// Insert new container
+					System.out.println("(qm) db: Insert status of new container: " + status.ContainerId);
+					String status_sql_str = status.to_sql_string();
+					String sql_insert = "INSERT INTO Containers VALUES (" + status_sql_str + ");";
+					stmt.executeUpdate(sql_insert);
+				}
 			} else {
 				// Update existing container
 				System.out.println("(qm) db: Update status of container: " + status.ContainerId);
@@ -1177,7 +1196,7 @@ public class QosManagerTool extends BaseGridTool
 		status.ContainerId = "container1";
 		status.NetworkAddress = "//ccc";
 		status.StorageTotal = 1000;
-		db_update_container(status, false);
+		db_update_container(status, true);
 		db_summary(true);
 
 		System.out.println("#### DB Test 4: Add a scheduled spec");
