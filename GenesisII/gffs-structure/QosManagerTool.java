@@ -750,7 +750,7 @@ public class QosManagerTool extends BaseGridTool
 		assert(spec != null);
 		String spec_sql_str = spec.to_sql_string();
 
-		// TODO: check existence, update container reserved size, file copy, etc.
+		// TODO: file copy
 		try {
 			Class.forName("org.sqlite.JDBC");
 			conn = DriverManager.getConnection("jdbc:sqlite:" + this.QOSDBName);
@@ -761,17 +761,33 @@ public class QosManagerTool extends BaseGridTool
 				System.out.println("(qm) db: Insert scheduled spec: " + spec.SpecId);
 
 				String sql = "INSERT INTO Specifications VALUES (" + spec_sql_str + ");";
-				stmt.executeUpdate(sql);
-
+				stmt.executeUpdate(sql);				
+				
 				for (int i = 0; i < scheduled_container_ids.size(); i++) {
 					sql = "INSERT INTO Relationships VALUES ('" + spec.SpecId + "','"
 							+ scheduled_container_ids.get(i) + "');";
+					String con_storagereserved = "SELECT StorageReserved FROM Containers WHERE ContainerId = '"
+							+ scheduled_container_ids.get(i) + "';";
+					ResultSet con_reserved = stmt.executeQuery(con_storagereserved);
+					int container_storagereserved = con_reserved.getInt(1) + spec.ReservedSize;
+					
+					String sql_update_rstorage = "UPDATE Containers SET StorageReserved = " + container_storagereserved 
+							+ " where ContainerID = '" + scheduled_container_ids.get(i) + "';";
 					stmt.executeUpdate(sql);
+					stmt.executeUpdate(sql_update_rstorage);
 				}
 			} else {
 				// Update existing spec
+				List<String> container_ids_old = new ArrayList<String>();
+				container_ids_old = db_get_container_ids_for_spec(spec.SpecId);
+				
 				System.out.println("(qm) db: Update scheduled spec: " + spec.SpecId);
 
+				String old_spec = "SELECT ReservedSize FROM Specifications WHERE SpecId = '"
+						+ spec.SpecId + "';";
+				ResultSet old_reserved = stmt.executeQuery(old_spec);
+				int old_spec_reserved = old_reserved.getInt(1);
+				
 				String sql = "DELETE FROM Relationships WHERE SpecId = '" + spec.SpecId + "';";
 				stmt.executeUpdate(sql);
 
@@ -782,9 +798,50 @@ public class QosManagerTool extends BaseGridTool
 				stmt.executeUpdate(sql);
 
 				for (int i = 0; i < scheduled_container_ids.size(); i++) {
-					sql = "INSERT INTO Relationships VALUES ('" + spec.SpecId + "','"
-							+ scheduled_container_ids.get(i) + "');";
-					stmt.executeUpdate(sql);
+					
+					if(container_ids_old.contains(scheduled_container_ids.get(i))){
+						// a container both in old and new
+						String con_storagereserved = "SELECT StorageReserved FROM Containers WHERE ContainerId = '"
+								+ scheduled_container_ids.get(i) + "';";
+						ResultSet con_reserved = stmt.executeQuery(con_storagereserved);
+						int container_storagereserved = con_reserved.getInt(1) + spec.ReservedSize - old_spec_reserved;
+						
+						String sql_update_rstorage = "UPDATE Containers SET StorageReserved = " + container_storagereserved 
+								+ " where ContainerID = '" + scheduled_container_ids.get(i) + "';";
+						stmt.executeUpdate(sql_update_rstorage);
+						
+						sql = "INSERT INTO Relationships VALUES ('" + spec.SpecId + "','"
+								+ scheduled_container_ids.get(i) + "');";
+						stmt.executeUpdate(sql);
+					}
+					else{
+						// a container only in new: create and file copy
+						String con_storagereserved = "SELECT StorageReserved FROM Containers WHERE ContainerId = '"
+								+ scheduled_container_ids.get(i) + "';";
+						ResultSet con_reserved = stmt.executeQuery(con_storagereserved);
+						int container_storagereserved = con_reserved.getInt(1) + spec.ReservedSize;
+						
+						String sql_update_rstorage = "UPDATE Containers SET StorageReserved = " + container_storagereserved 
+								+ " where ContainerID = '" + scheduled_container_ids.get(i) + "';";
+						stmt.executeUpdate(sql_update_rstorage);
+						
+						sql = "INSERT INTO Relationships VALUES ('" + spec.SpecId + "','"
+								+ scheduled_container_ids.get(i) + "');";
+						stmt.executeUpdate(sql);
+						System.out.println("(qm) db : File copy for specification " + spec.SpecId + " to " + scheduled_container_ids.get(i));
+					}				
+				}
+				for (int i = 0; i <container_ids_old.size(); i++) {
+					if(!scheduled_container_ids.contains(container_ids_old.get(i))){						
+						String con_storagereserved = "SELECT StorageReserved FROM Containers WHERE ContainerId = '"
+								+ container_ids_old.get(i) + "';";
+						ResultSet con_reserved = stmt.executeQuery(con_storagereserved);
+						int container_storagereserved = con_reserved.getInt(1) - old_spec_reserved;
+						String sql_update_rstorage = "UPDATE Containers SET StorageReserved = " + container_storagereserved 
+								+ " where ContainerID = '" + container_ids_old.get(i) + "';";
+						stmt.executeUpdate(sql_update_rstorage);
+						System.out.println("(qm) db : Delete strorage of specification " + spec.SpecId + " on " + container_ids_old.get(i));
+					}					
 				}
 			}
 			stmt.close();
@@ -1067,6 +1124,7 @@ public class QosManagerTool extends BaseGridTool
 		System.out.println("#### DB Test 4: Add a scheduled spec");
 		QosSpec spec = new QosSpec();
 		spec.SpecId = "client1-spec1";
+		spec.ReservedSize = 10;
 		List<String> container_list = new ArrayList<String>();
 		container_list.add("container1");
 		db_add_scheduled_spec(spec, container_list, true);
@@ -1074,6 +1132,7 @@ public class QosManagerTool extends BaseGridTool
 
 		System.out.println("#### DB Test 5: Update a scheduled spec");
 		spec.SpecId = "client1-spec1";
+		spec.ReservedSize = 20;
 		container_list.clear();
 		container_list.add("container1");
 		container_list.add("container2");
@@ -1082,6 +1141,7 @@ public class QosManagerTool extends BaseGridTool
 
 		System.out.println("#### DB Test 6: Update a scheduled spec");
 		spec.SpecId = "client1-spec1";
+		spec.ReservedSize = 30;
 		container_list.clear();
 		container_list.add("container2");
 		db_add_scheduled_spec(spec, container_list, false);
