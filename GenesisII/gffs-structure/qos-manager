@@ -4,10 +4,10 @@ containers into the QoS database, and use 'mkdir' to create dynamically
 scheduled folders.
 
 The following options are available:
---init_db
+--init-db
     Initialize the QoS database. The QoS database will be stored in both the
     grid home directory and the local user directory.
---show_db
+--show-db
     Show summary of the QoS database.
 --show-db-verbose
     Show details of the QoS database.
