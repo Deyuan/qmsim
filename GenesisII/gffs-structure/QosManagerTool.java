@@ -1007,6 +1007,9 @@ public class QosManagerTool extends BaseGridTool
 				sql = "DELETE FROM Containers WHERE ContainerId = '" + container_id + "';";
 				stmt.executeUpdate(sql);
 			}
+			else {
+				System.out.println("(qm) db: " + container_id + " does not exist in db.");
+			}
 			stmt.close();
 			conn.close();
 			return true;
