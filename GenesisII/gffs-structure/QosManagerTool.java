@@ -217,9 +217,9 @@ public class QosManagerTool extends BaseGridTool
 			try {
 				GeniiPath path = new GeniiPath(spec_path);
 				if (!path.exists())
-					throw new FileNotFoundException(String.format("Unable to find status file %s!", path));
+					throw new FileNotFoundException(String.format("Unable to find spec file %s!", path));
 				if (!path.isFile())
-					throw new IOException(String.format("Status path %s is not a file!", path));
+					throw new IOException(String.format("Spec path %s is not a file!", path));
 
 				in = path.openInputStream();
 				reader = new InputStreamReader(in);
@@ -545,7 +545,7 @@ public class QosManagerTool extends BaseGridTool
 		// if exists
 		File dbFile = new File(this.QOSDBName);
 
-		if(dbFile.exists()){
+		if (dbFile.exists()) {
 			db_destroy();
 		}
 		Connection conn = null;
@@ -815,7 +815,7 @@ public class QosManagerTool extends BaseGridTool
 
 				for (int i = 0; i < scheduled_container_ids.size(); i++) {
 
-					if(container_ids_old.contains(scheduled_container_ids.get(i))){
+					if (container_ids_old.contains(scheduled_container_ids.get(i))) {
 						// a container both in old and new
 						String con_storagereserved = "SELECT StorageReserved FROM Containers WHERE ContainerId = '"
 								+ scheduled_container_ids.get(i) + "';";
@@ -829,8 +829,7 @@ public class QosManagerTool extends BaseGridTool
 						sql = "INSERT INTO Relationships VALUES ('" + spec.SpecId + "','"
 								+ scheduled_container_ids.get(i) + "');";
 						stmt.executeUpdate(sql);
-					}
-					else{
+					} else {
 						// a container only in new: create and file copy
 						String con_storagereserved = "SELECT StorageReserved FROM Containers WHERE ContainerId = '"
 								+ scheduled_container_ids.get(i) + "';";
@@ -848,7 +847,7 @@ public class QosManagerTool extends BaseGridTool
 					}
 				}
 				for (int i = 0; i <container_ids_old.size(); i++) {
-					if(!scheduled_container_ids.contains(container_ids_old.get(i))){
+					if (!scheduled_container_ids.contains(container_ids_old.get(i))) {
 						String con_storagereserved = "SELECT StorageReserved FROM Containers WHERE ContainerId = '"
 								+ container_ids_old.get(i) + "';";
 						ResultSet con_reserved = stmt.executeQuery(con_storagereserved);
@@ -1277,18 +1276,14 @@ public class QosManagerTool extends BaseGridTool
 		if (spec.Latency == "High") {
 			return true;
 		} else {
-			ContainerStatus primary = status_list.get(0);
-			// TODO: parse strings
-			//String spec_level1 = spec.PhysicalLocations.strip().split('/')[1];
-			//String spec_level2 = spec.PhysicalLocations.strip().split('/')[2];
-			//String container_level1 = primary.PhysicalLocation.strip().split('/')[1];
-			//String container_level2 = primary.PhysicalLocation.strip().split('/')[2];
-			//if (spec_level1 == container_level1 && spec_level2 == contaienr_level2) {
-			//	return true;
-			//} else {
-			//	return false;
-			//}
-			return false;
+			String[] spec_location = spec.PhysicalLocations.split("/");
+			String[] container_location = status_list.get(0).PhysicalLocation.split("/");
+			if (spec_location[1].toLowerCase().equals(container_location[1].toLowerCase()) &&
+					spec_location[2].toLowerCase().equals(container_location[2].toLowerCase())) {
+				return true;
+			} else {
+				return false;
+			}
 		}
 	}
 
