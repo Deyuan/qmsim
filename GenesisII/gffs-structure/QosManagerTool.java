@@ -168,8 +168,33 @@ public class QosManagerTool extends BaseGridTool
 		}
 
 		public boolean parse_string(String spec_string) {
-			System.out.println("(qm) NYI.");
-			return false;
+			String[] lines = spec_string.split("\n");
+			for (int i = 0; i < lines.length; i++) {
+				String[] contents = lines[i].split("#");
+				if (contents.length > 0) {
+					String[] key_val = contents[0].split(",");
+					String key = "", val = "";
+					if (key_val.length > 0) key = key_val[0].trim();
+					if (key_val.length > 1) val = key_val[1].trim();
+					if (key.equals("")) { continue; }
+					else if (key.equals("SpecId")) { this.SpecId = val; }
+					else if (key.equals("Availability")) { this.Availability = Integer.parseInt(val); }
+					else if (key.equals("Reliability")) { this.Reliability = Integer.parseInt(val); }
+					else if (key.equals("ReservedSize")) { this.ReservedSize = Integer.parseInt(val); }
+					else if (key.equals("UsedSize")) { this.UsedSize = Integer.parseInt(val); }
+					else if (key.equals("DataIntegrity")) { this.DataIntegrity = Integer.parseInt(val); }
+					else if (key.equals("Bandwidth")) { this.Bandwidth = val; }
+					else if (key.equals("Latency")) { this.Latency = val; }
+					else if (key.equals("PhysicalLocations")) { this.PhysicalLocations = val; }
+					else if (key.equals("SpecPath")) { this.SpecPath = val; }
+					else {
+						System.out.println("(qm) Warning: unrecognized specs key: " + key);
+						return false;
+					}
+				}
+			}
+			if (this.SpecId.equals("")) return false;
+			else return true;
 		}
 
 		public String to_string() {
@@ -181,8 +206,40 @@ public class QosManagerTool extends BaseGridTool
 			return spec_str;
 		}
 
-		public boolean read_from_file(String file_path) {
-			System.out.println("(qm) NYI.");
+		public boolean read_from_file(String spec_path) {
+			char[] data = new char[ByteIOConstants.PREFERRED_SIMPLE_XFER_BLOCK_SIZE];
+			int read;
+			InputStream in = null;
+			InputStreamReader reader = null;
+			String spec_str = "";
+
+			try {
+				GeniiPath path = new GeniiPath(spec_path);
+				in = path.openInputStream();
+				reader = new InputStreamReader(in);
+
+				while ((read = reader.read(data, 0, data.length)) > 0) {
+					String s = new String(data, 0, read);
+					spec_str += s;
+				}
+			} catch (IOException e) {
+				System.out.println(e.toString());
+				spec_str = "";
+			} finally {
+				StreamUtils.close(reader);
+				StreamUtils.close(in);
+			}
+
+			if (spec_str != "") {
+				boolean succ = this.parse_string(spec_str);
+				if (succ) {
+					System.out.println("(qm) Get QoS specs from " + spec_path);
+					this.SpecPath = spec_path; // TODO: Get full grid path!
+					return true;
+				}
+			}
+
+			System.out.println("(qm) Fail to get QoS specs from " + spec_path);
 			return false;
 		}
 
@@ -278,9 +335,44 @@ public class QosManagerTool extends BaseGridTool
 			}
 		}
 
-		public boolean parse_string(String spec_string) {
-			System.out.println("(qm) NYI.");
-			return false;
+		public boolean parse_string(String status_string) {
+			String[] lines = status_string.split("\n");
+			for (int i = 0; i < lines.length; i++) {
+				String[] contents = lines[i].split("#");
+				if (contents.length > 0) {
+					String[] key_val = contents[0].split(",");
+					String key = "", val = "";
+					if (key_val.length > 0) key = key_val[0].trim();
+					if (key_val.length > 1) val = key_val[1].trim();
+					if (key.equals("")) { continue; }
+					else if (key.equals("ContainerId")) { this.ContainerId = val; }
+					else if (key.equals("StorageTotal")) { this.StorageTotal = Integer.parseInt(val); }
+					else if (key.equals("PathToSwitch")) { this.PathToSwitch = val; }
+					else if (key.equals("CoresAvailable")) { this.CoresAvailable = Integer.parseInt(val); }
+					else if (key.equals("StorageRBW")) { this.StorageRBW = Double.parseDouble(val); }
+					else if (key.equals("StorageWBW")) { this.StorageWBW = Double.parseDouble(val); }
+					else if (key.equals("StorageRLatency")) { this.StorageRLatency = Integer.parseInt(val); }
+					else if (key.equals("StorageWLatency")) { this.StorageWLatency = Integer.parseInt(val); }
+					else if (key.equals("StorageRAIDLevel")) { this.StorageRAIDLevel = Integer.parseInt(val); }
+					else if (key.equals("CostPerGBMonth")) { this.CostPerGBMonth = Double.parseDouble(val); }
+					else if (key.equals("DataIntegrity")) { this.DataIntegrity = Integer.parseInt(val); }
+					else if (key.equals("StorageReserved")) { this.StorageReserved = Integer.parseInt(val); }
+					else if (key.equals("StorageUsed")) { this.StorageUsed = Integer.parseInt(val); }
+					else if (key.equals("StorageReliability")) { this.StorageReliability = Integer.parseInt(val); }
+					else if (key.equals("ContainerAvailability")) { this.ContainerAvailability = Integer.parseInt(val); }
+					else if (key.equals("StorageRBW_dyn")) { this.StorageRBW_dyn = Double.parseDouble(val); }
+					else if (key.equals("StorageWBW_dyn")) { this.StorageWBW_dyn = Double.parseDouble(val); }
+					else if (key.equals("PhysicalLocation")) { this.PhysicalLocation = val; }
+					else if (key.equals("NetworkAddress")) { this.NetworkAddress = val; }
+					else if (key.equals("StatusPath")) { this.StatusPath = val; }
+					else {
+						System.out.println("(qm) Warning: unrecognized status key: " + key);
+						return false;
+					}
+				}
+			}
+			if (this.ContainerId.equals("")) return false;
+			else return true;
 		}
 
 		public String to_string() {
@@ -299,8 +391,40 @@ public class QosManagerTool extends BaseGridTool
 			return status_str;
 		}
 
-		public boolean read_from_file(String file_path) {
-			System.out.println("(qm) NYI.");
+		public boolean read_from_file(String status_path) {
+			char[] data = new char[ByteIOConstants.PREFERRED_SIMPLE_XFER_BLOCK_SIZE];
+			int read;
+			InputStream in = null;
+			InputStreamReader reader = null;
+			String status_str = "";
+
+			try {
+				GeniiPath path = new GeniiPath(status_path);
+				in = path.openInputStream();
+				reader = new InputStreamReader(in);
+
+				while ((read = reader.read(data, 0, data.length)) > 0) {
+					String s = new String(data, 0, read);
+					status_str += s;
+				}
+			} catch (IOException e) {
+				System.out.println(e.toString());
+				status_str = "";
+			} finally {
+				StreamUtils.close(reader);
+				StreamUtils.close(in);
+			}
+
+			if (status_str != "") {
+				boolean succ = this.parse_string(status_str);
+				if (succ) {
+					System.out.println("(qm) Get container status from " + status_path);
+					this.StatusPath = status_path;  // TODO: Get full grid path!
+					return true;
+				}
+			}
+
+			System.out.println("(qm) Fail to get container status from " + status_path);
 			return false;
 		}
 
@@ -367,8 +491,11 @@ public class QosManagerTool extends BaseGridTool
 		} else if (_status_path_to_add != null) {
 			System.out.println("(qm) main: Add a container with status file at "
 					+ _status_path_to_add);
-			ContainerStatus status = read_status_file(_status_path_to_add);
-			db_update_container(status, true); // init
+			ContainerStatus status = new ContainerStatus();
+			boolean succ = status.read_from_file(_status_path_to_add);
+			if (succ) {
+				db_update_container(status, true); // init
+			}
 		} else if (_container_id_to_remove != null) {
 			System.out.println("(qm) main: Remove container id "
 					+ _container_id_to_remove);
@@ -449,7 +576,7 @@ public class QosManagerTool extends BaseGridTool
 
 				stmt = conn.createStatement();
 
-				System.out.println(" - Specifications:");
+				System.out.println("   * Specifications:");
 				String sql = "SELECT * FROM Specifications;";
 				ResultSet rs_spec = stmt.executeQuery(sql);
 				ResultSetMetaData rsmd_spec = rs_spec.getMetaData();
@@ -474,7 +601,7 @@ public class QosManagerTool extends BaseGridTool
 					System.out.println("");
 				}
 
-				System.out.println(" - Containers:");
+				System.out.println("   * Containers:");
 				sql = "SELECT * FROM Containers;";
 				ResultSet rs_container = stmt.executeQuery(sql);
 				ResultSetMetaData rsmd_container = rs_container.getMetaData();
@@ -499,7 +626,7 @@ public class QosManagerTool extends BaseGridTool
 					System.out.println("");
 				}
 
-				System.out.println(" - Relationships:");
+				System.out.println("   * Relationships:");
 				sql = "SELECT * FROM Relationships;";
 				ResultSet rs_relationship = stmt.executeQuery(sql);
 				ResultSetMetaData rsmd_relationship = rs_container.getMetaData();
@@ -508,7 +635,7 @@ public class QosManagerTool extends BaseGridTool
 
 				System.out.print("     ");
 				for (int i = 1; i <= numberOfColumns_relationship; i++) {
-					if (i > 1) System.out.print(" -> ");
+					if (i > 1) System.out.print(", ");
 					String columnName_relationship = rsmd_relationship.getColumnName(i);
 					System.out.print(columnName_relationship);
 				}
@@ -981,13 +1108,13 @@ public class QosManagerTool extends BaseGridTool
 		status = db_get_status("xxx");
 		if (status != null) System.out.println("Error");
 		status = db_get_status("container1");
-		if (status != null) System.out.println(status.to_string());
+		if (status != null) System.out.println(status.to_sql_string());
 		else System.out.println("Error");
 
 		spec = db_get_spec("xxx");
 		if (spec != null) System.out.println("Error");
 		spec = db_get_spec("client1-spec1");
-		if (spec != null) System.out.println(spec.to_string());
+		if (spec != null) System.out.println(spec.to_sql_string());
 		else System.out.println("Error");
 	}
 
@@ -1136,45 +1263,6 @@ public class QosManagerTool extends BaseGridTool
 	/**************************************************************************
 	 *  QoS Scheduler
 	 **************************************************************************/
-	// Get client QoS spec from a genii path
-	QosSpec read_spec_file(String spec_path) {
-		char[] data = new char[ByteIOConstants.PREFERRED_SIMPLE_XFER_BLOCK_SIZE];
-		int read;
-		InputStream in = null;
-		InputStreamReader reader = null;
-		String spec_str = "";
-		QosSpec spec = null;
-
-		try {
-			GeniiPath path = new GeniiPath(spec_path);
-			in = path.openInputStream();
-			reader = new InputStreamReader(in);
-
-			while ((read = reader.read(data, 0, data.length)) > 0) {
-				String s = new String(data, 0, read);
-				spec_str += s;
-			}
-		} catch (IOException e) {
-			System.out.println(e.toString());
-			spec_str = "";
-		} finally {
-			StreamUtils.close(reader);
-			StreamUtils.close(in);
-		}
-
-		if (spec_str != "") {
-			spec = new QosSpec();
-			boolean succ = spec.parse_string(spec_str);
-			if (succ) {
-				System.out.println("(qm) Get QoS specs from " + spec_path);
-				return spec;
-			}
-		}
-
-		System.out.println("(qm) Fail to get QoS specs from " + spec_path);
-		return null;
-	}
-
 	// Schedule filter: filter out some single containers
 	boolean schedule_filter(QosSpec spec, ContainerStatus status) {
 		if (status.ContainerAvailability <= 0) return false;
@@ -1189,13 +1277,19 @@ public class QosManagerTool extends BaseGridTool
 	// return a list of scheduled container ids
 	public List<String> schedule(String spec_path, String spec_id) {
 		assert(spec_path == null && spec_id != null || spec_path != null && spec_id == null);
+		List<String> scheduled_containers = new ArrayList<String>();
 		QosSpec spec = null;
 		if (spec_path != null) {
-			spec = read_spec_file(spec_path);
+			spec = new QosSpec();
+			boolean succ = spec.read_from_file(spec_path);
+			if (!succ) spec = null;
 		} else {
 			spec = db_get_spec(spec_id);
 		}
-		List<String> scheduled_containers = new ArrayList<String>();
+		if (spec == null) {
+			System.out.println("(qm) Error: spec not available.");
+			return scheduled_containers;
+		}
 		List<String> container_ids = db_get_container_id_list();
 		List<ContainerStatus> status_list = new ArrayList<ContainerStatus>();
 		// filter out some containers
@@ -1283,45 +1377,6 @@ public class QosManagerTool extends BaseGridTool
 	/**************************************************************************
 	 *  QoS Monitors
 	 **************************************************************************/
-	// Get container status from a genii path
-	ContainerStatus read_status_file(String status_path) {
-		char[] data = new char[ByteIOConstants.PREFERRED_SIMPLE_XFER_BLOCK_SIZE];
-		int read;
-		InputStream in = null;
-		InputStreamReader reader = null;
-		String status_str = "";
-		ContainerStatus status = null;
-
-		try {
-			GeniiPath path = new GeniiPath(status_path);
-			in = path.openInputStream();
-			reader = new InputStreamReader(in);
-
-			while ((read = reader.read(data, 0, data.length)) > 0) {
-				String s = new String(data, 0, read);
-				status_str += s;
-			}
-		} catch (IOException e) {
-			System.out.println(e.toString());
-			status_str = "";
-		} finally {
-			StreamUtils.close(reader);
-			StreamUtils.close(in);
-		}
-
-		if (status_str != "") {
-			status = new ContainerStatus();
-			boolean succ = status.parse_string(status_str);
-			if (succ) {
-				System.out.println("(qm) Get container status from " + status_path);
-				return status;
-			}
-		}
-
-		System.out.println("(qm) Fail to get container status from " + status_path);
-		return null;
-	}
-
 	// Monitor a qos spec
 	private boolean monitor_spec(String spec_id) {
 		List<String> container_ids = db_get_container_ids_for_spec(spec_id);
@@ -1352,11 +1407,13 @@ public class QosManagerTool extends BaseGridTool
 	private boolean monitor_container(String container_id) {
 		ContainerStatus status_in_db = db_get_status(container_id);
 		assert(status_in_db != null);
-		ContainerStatus status_remote = read_status_file(status_in_db.StatusPath);
-		if (status_remote == null) {
+		ContainerStatus status_remote = new ContainerStatus();
+		boolean succ = status_remote.read_from_file(status_in_db.StatusPath);
+		if (!succ) {
 			System.out.println("(qm) monitor: Container " + container_id +
 					" is not available.");
 			// TODO: update database and reschedule
+			return false;
 		} else {
 			// Avoid overwriting the reserved size (container doesn't know this)
 			status_remote.StorageReserved = status_in_db.StorageReserved;
