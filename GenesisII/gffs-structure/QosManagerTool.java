@@ -576,14 +576,13 @@ public class QosManagerTool extends BaseGridTool
 
 				stmt = conn.createStatement();
 
-				System.out.println("   * Specifications:");
+				System.out.print("  ** SPECIFICATIONS: ");
 				String sql = "SELECT * FROM Specifications;";
 				ResultSet rs_spec = stmt.executeQuery(sql);
 				ResultSetMetaData rsmd_spec = rs_spec.getMetaData();
 
 				int numberOfColumns_spec = rsmd_spec.getColumnCount();
 
-				System.out.print("     ");
 				for (int i = 1; i <= numberOfColumns_spec; i++) {
 					if (i > 1) System.out.print(", ");
 					String columnName_spec = rsmd_spec.getColumnName(i);
@@ -591,24 +590,27 @@ public class QosManagerTool extends BaseGridTool
 				}
 				System.out.println("");
 
+				String[] spec_prefix = {"","(A 0.)","(R 0.)","","","DI ","","","",""};
+				String[] spec_suffix = {"","",""," MB"," MB","","","","",""};
 				while (rs_spec.next()) {
-					System.out.print("     ");
+					System.out.print("   - ");
 					for (int i = 1; i <= numberOfColumns_spec; i++) {
 						if (i > 1) System.out.print(", ");
+						System.out.print(spec_prefix[i - 1]);
 						String columnValue_spec = rs_spec.getString(i);
 						System.out.print(columnValue_spec);
+						System.out.print(spec_suffix[i - 1]);
 					}
 					System.out.println("");
 				}
 
-				System.out.println("   * Containers:");
+				System.out.print("  ** CONTAINERS: ");
 				sql = "SELECT * FROM Containers;";
 				ResultSet rs_container = stmt.executeQuery(sql);
 				ResultSetMetaData rsmd_container = rs_container.getMetaData();
 
 				int numberOfColumns_container = rsmd_container.getColumnCount();
 
-				System.out.print("     ");
 				for (int i = 1; i <= numberOfColumns_container; i++) {
 					if (i > 1) System.out.print(", ");
 					String columnName_container = rsmd_container.getColumnName(i);
@@ -616,24 +618,27 @@ public class QosManagerTool extends BaseGridTool
 				}
 				System.out.println("");
 
+				String[] status_prefix = {"","","","","","","","","RAID ","$","DI ","","","(R 0.)","(A 0.)","","","","",""};
+				String[] status_suffix = {""," MB",""," cores"," MB/s"," MB/s"," us"," us","","/GB/Month",""," MB"," MB","",""," MB/s"," MB/s","","",""};
 				while (rs_container.next()) {
-					System.out.print("     ");
+					System.out.print("   - ");
 					for (int i = 1; i <= numberOfColumns_container; i++) {
 						if (i > 1) System.out.print(", ");
+						System.out.print(status_prefix[i - 1]);
 						String columnValue_container = rs_container.getString(i);
 						System.out.print(columnValue_container);
+						System.out.print(status_suffix[i - 1]);
 					}
 					System.out.println("");
 				}
 
-				System.out.println("   * Relationships:");
+				System.out.print("  ** RELATIONSHIPS: ");
 				sql = "SELECT * FROM Relationships;";
 				ResultSet rs_relationship = stmt.executeQuery(sql);
 				ResultSetMetaData rsmd_relationship = rs_container.getMetaData();
 
 				int numberOfColumns_relationship = rsmd_relationship.getColumnCount();
 
-				System.out.print("     ");
 				for (int i = 1; i <= numberOfColumns_relationship; i++) {
 					if (i > 1) System.out.print(", ");
 					String columnName_relationship = rsmd_relationship.getColumnName(i);
@@ -642,7 +647,7 @@ public class QosManagerTool extends BaseGridTool
 				System.out.println("");
 
 				while (rs_relationship.next()) {
-					System.out.print("     ");
+					System.out.print("   - ");
 					for (int i = 1; i <= numberOfColumns_relationship; i++) {
 						if (i > 1) System.out.print(" -> ");
 						String columnValue_relationship = rs_relationship.getString(i);
