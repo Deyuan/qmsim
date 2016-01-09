@@ -1641,7 +1641,19 @@ public class QosManagerTool extends BaseGridTool
 		if (!succ) {
 			System.out.println("(qm) monitor: Container " + container_id +
 					" is not available.");
-			// TODO: update database and reschedule
+			List<String> spec_list = db_get_spec_ids_on_container("container1");
+			if(spec_list.size()==0){
+				//no spec is affected
+			}
+			else{
+				//resechedule for affected specs
+				for (int i = 0; i < spec_list.size(); i++) {
+					QosSpec spec = db_get_spec(spec_list.get(i));
+					schedule(spec.SpecPath,spec.SpecId);
+				}
+			}
+			//update database
+			db_remove_container(container_id);			
 			return false;
 		} else {
 			// Avoid overwriting the reserved size (container doesn't know this)
