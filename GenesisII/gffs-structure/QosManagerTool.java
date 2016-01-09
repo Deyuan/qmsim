@@ -664,13 +664,13 @@ public class QosManagerTool extends BaseGridTool
 	}
 
 	private void db_destroy() {
-		File dbFile = new File(db_grid_path());
-		if (dbFile.exists()) {
-			dbFile.delete();
-		}
-		dbFile = new File(db_local_path());
-		if (dbFile.exists()) {
-			dbFile.delete();
+		// The qos.db file in grid home directory should be removed by hand
+		GeniiPath dbFileGrid = new GeniiPath(db_grid_path());
+		assert(!dbFileGrid.exists());
+
+		File dbFileLocal = new File(db_local_path());
+		if (dbFileLocal.exists()) {
+			dbFileLocal.delete();
 		}
 	}
 
@@ -861,13 +861,14 @@ public class QosManagerTool extends BaseGridTool
 
 			assert (status != null);
 
+			// TODO: check satisfiability of specs related to this container.
 			if (init) {
 				String sql = "SELECT * FROM Containers WHERE ContainerId = '" + status.ContainerId + "';";
 				ResultSet rs = stmt.executeQuery(sql);
 
 				if (rs.next()) {
 					//container already exists
-					System.out.println("(qm) db: Container: " + status.ContainerId + "already exists.");
+					System.out.println("(qm) db: Container: " + status.ContainerId + " already exists.");
 					System.out.println("(qm) db: Update status for " + status.ContainerId);
 					String sql_storagereserved = "SELECT StorageReserved FROM Containers WHERE ContainerId = '" + status.ContainerId + "';";
 					ResultSet rs_reserved = stmt.executeQuery(sql_storagereserved);
