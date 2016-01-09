@@ -26,7 +26,7 @@ class ContainerStatus:
             self.StorageWBW_dyn = 0.0       # (flt) MB/s. e.g. average bw of past 10 minutes
             # extra information
             self.PhysicalLocation = ''      # (str) hierarchical phisical location
-            self.NetworkAddress = ''        # (str) grid path of the container
+            self.RnsPath = ''               # (str) grid path of the container
             self.StatusPath = ''            # (str) grid path of the status file
         else:
             self.ContainerId, \
@@ -47,13 +47,13 @@ class ContainerStatus:
             self.StorageRBW_dyn, \
             self.StorageWBW_dyn, \
             self.PhysicalLocation, \
-            self.NetworkAddress, \
+            self.RnsPath, \
             self.StatusPath = status_tuple
             # convert unicode string into regular string
             self.ContainerId = str(self.ContainerId)
             self.PathToSwitch = str(self.PathToSwitch)
             self.PhysicalLocation = str(self.PhysicalLocation)
-            self.NetworkAddress = str(self.NetworkAddress)
+            self.RnsPath = str(self.RnsPath)
             self.StatusPath = str(self.StatusPath)
 
     # Parse status from a string
@@ -105,8 +105,8 @@ class ContainerStatus:
                 self.StorageWBW_dyn = float(val)
             elif key == 'PhysicalLocation':
                 self.PhysicalLocation = val
-            elif key == 'NetworkAddress':
-                self.NetworkAddress = val
+            elif key == 'RnsPath':
+                self.RnsPath = val
             elif key == 'StatusPath':
                 self.StatusPath = val
             else:
@@ -147,7 +147,7 @@ class ContainerStatus:
             + 'StorageRBW_dyn'       + ', ' + str(self.StorageRBW_dyn       ) + '\t# MB/s\n' \
             + 'StorageWBW_dyn'       + ', ' + str(self.StorageWBW_dyn       ) + '\t# MB/s\n' \
             + 'PhysicalLocation'     + ', ' + str(self.PhysicalLocation     ) + '\n' \
-            + 'NetworkAddress'       + ', ' + str(self.NetworkAddress       ) + '\n' \
+            + 'RnsPath'              + ', ' + str(self.RnsPath              ) + '\n' \
             + 'StatusPath'           + ', ' + str(self.StatusPath           ) + '\n'
         return status
 
@@ -183,7 +183,7 @@ class ContainerStatus:
                 self.StorageRBW_dyn       ,
                 self.StorageWBW_dyn       ,
                 self.PhysicalLocation     ,
-                self.NetworkAddress       ,
+                self.RnsPath              ,
                 self.StatusPath           )
 
 
@@ -208,7 +208,7 @@ def get_sql_header():
              "StorageRBW_dyn"        + " REAL," + \
              "StorageWBW_dyn"        + " REAL," + \
              "PhysicalLocation"      + " TEXT," + \
-             "NetworkAddress"        + " TEXT," + \
+             "RnsPath"               + " TEXT," + \
              "StatusPath"            + " TEXT" + \
              ");"
     return header
