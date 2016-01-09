@@ -16,15 +16,19 @@ import java.sql.ResultSetMetaData;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import org.morgan.util.io.StreamUtils;
 
+import edu.virginia.vcgr.genii.client.InstallationProperties;
 import edu.virginia.vcgr.genii.client.byteio.ByteIOConstants;
 import edu.virginia.vcgr.genii.client.cmd.ReloadShellException;
 import edu.virginia.vcgr.genii.client.cmd.ToolException;
+import edu.virginia.vcgr.genii.client.context.GridUserEnvironment;
 import edu.virginia.vcgr.genii.client.dialog.UserCancelException;
 import edu.virginia.vcgr.genii.client.gpath.GeniiPath;
 import edu.virginia.vcgr.genii.client.io.LoadFileResource;
+import edu.virginia.vcgr.genii.client.rns.PathOutcome;
 import edu.virginia.vcgr.genii.client.rns.RNSException;
 import edu.virginia.vcgr.genii.client.rp.ResourcePropertyException;
 import edu.virginia.vcgr.genii.client.security.axis.AuthZSecurityException;
@@ -250,6 +254,7 @@ public class QosManagerTool extends BaseGridTool
 			return false;
 		}
 
+		@SuppressWarnings("unused")
 		public boolean write_to_file(String file_path) {
 			System.out.println("(qm) NYI.");
 			return false;
@@ -440,6 +445,7 @@ public class QosManagerTool extends BaseGridTool
 			return false;
 		}
 
+		@SuppressWarnings("unused")
 		public boolean write_to_file(String file_path) {
 			System.out.println("(qm) NYI.");
 			return false;
@@ -492,56 +498,79 @@ public class QosManagerTool extends BaseGridTool
 	 **************************************************************************/
 	public void qos_manager(String arg) throws IOException
 	{
+		boolean succ;
 		if (_spec_id_to_schedule != null) {
 			System.out.println("(qm) main: Schedule a QoS specs id "
 					+ _spec_id_to_schedule);
-			db_sync_down();
-			schedule(null, _spec_id_to_schedule);
-			db_sync_up();
+			succ = db_sync_down();
+			if (succ) {
+				schedule(null, _spec_id_to_schedule);
+				db_sync_up();
+			}
 		} else if (_spec_id_to_remove != null) {
 			System.out.println("(qm) main: Remove a QoS specs id "
 					+ _spec_id_to_remove);
-			db_sync_down();
-			db_remove_spec(_spec_id_to_remove);
-			db_sync_up();
+			succ = db_sync_down();
+			if (succ) {
+				db_remove_spec(_spec_id_to_remove);
+				db_sync_up();
+			}
 		} else if (_status_path_to_add != null) {
 			System.out.println("(qm) main: Add a container with status file at "
 					+ _status_path_to_add);
 			ContainerStatus status = new ContainerStatus();
-			boolean succ = status.read_from_file(_status_path_to_add);
+			succ = status.read_from_file(_status_path_to_add);
 			if (succ) {
-				db_sync_down();
-				db_update_container(status, true); // init
-				db_sync_up();
+				succ = db_sync_down();
+				if (succ) {
+					db_update_container(status, true); // init
+					db_sync_up();
+				}
 			}
 		} else if (_container_id_to_remove != null) {
 			System.out.println("(qm) main: Remove container id "
 					+ _container_id_to_remove);
-			db_sync_down();
-			db_remove_container(_container_id_to_remove);
-			db_sync_up();
+			succ = db_sync_down();
+			if (succ) {
+				db_remove_container(_container_id_to_remove);
+				db_sync_up();
+			}
 		} else if (_show_db) {
 			System.out.println("(qm) main: Show information of the QoS database.");
-			db_sync_down();
-			db_summary(false);
+			succ = db_sync_down();
+			if (succ) {
+				db_summary(false);
+			}
 		} else if (_show_db_verbose) {
 			System.out.println("(qm) main: Show details of the QoS database.");
-			db_sync_down();
-			db_summary(true);
+			succ = db_sync_down();
+			if (succ) {
+				db_summary(true);
+			}
 		} else if (_init_db) {
 			System.out.println("(qm) main: Initialize the QoS database.");
-			db_init();
-			db_sync_up();
+			GeniiPath dbFile = new GeniiPath(db_grid_path());
+			if (dbFile.exists()) {
+				System.out.println("(qm) Warning: QoS database already exists. To rebuild an empty");
+				System.out.println("     QoS database, please remove grid:" + db_grid_path());
+			} else {
+				db_init();
+				db_sync_up();
+			}
 		} else if (_monitor) {
 			System.out.println("(qm) main: Monitor container status and specs.");
-			db_sync_down();
-			monitor_all();
-			db_sync_up();
+			succ = db_sync_down();
+			if (succ) {
+				monitor_all();
+				db_sync_up();
+			}
 		} else if (_test) {
 			System.out.println("(qm) internal: Test the QoS manager.");
-			db_sync_down();
-			test_db();
-			db_sync_up();
+			succ = db_sync_down();
+			if (succ) {
+				test_db();
+				db_sync_up();
+			}
 		} else {
 			System.out.println("(qm) main: Please run 'man qos-manager' for usable options.");
 		}
@@ -552,30 +581,51 @@ public class QosManagerTool extends BaseGridTool
 	 **************************************************************************/
 	private String db_grid_path() {
 		if (this._gridHomeDir == null) {
-			// TODO: get real grid home directory
-			this._gridHomeDir = "/home/xcg.virginia.edu/dg7vp";
+			Map<String, String> env = GridUserEnvironment.getGridUserEnvironment();
+			this._gridHomeDir = env.get("HOME");
 		}
 		return this._gridHomeDir + "/" + this._qosDbName;
 	}
 
 	private String db_local_path() {
 		if (this._localUserDir == null) {
-			// TODO: get real user directory
-			this._localUserDir = "/home/dg/database";
+			this._localUserDir = InstallationProperties.getUserDir();
 		}
 		return this._localUserDir + "/" + this._qosDbName;
 	}
 
 	private boolean db_sync_down() {
-		// TODO: Copy from grid to local
+		GeniiPath dbFile = new GeniiPath(db_grid_path());
+		if (!dbFile.exists()) {
+			System.out.println("(qm) db: Please run 'qos-manager --init-db' to initialize the QoS database.");
+			return false;
+		}
 		System.out.println("(qm) db: Sync from grid to local.");
-		return false;
+		PathOutcome po = CopyTool.copy("grid:" + db_grid_path(),
+				"local:" + db_local_path(), false, true, null, stderr);
+		if (PathOutcome.OUTCOME_SUCCESS.differs(po)) {
+			System.out.println(po.toString());
+			return false;
+		} else {
+			return true;
+		}
 	}
 
 	private boolean db_sync_up() {
-		// TODO: Copy from local to grid
+		File dbFile = new File(db_local_path());
+		if (!dbFile.exists()) {
+			System.out.println("(qm) db: Error: Cannot find local:" + db_local_path());
+			return false;
+		}
 		System.out.println("(qm) db: Sync from local to grid.");
-		return false;
+		PathOutcome po = CopyTool.copy("local:" + db_local_path(),
+				"grid:" + db_grid_path(), false, true, null, stderr);
+		if (PathOutcome.OUTCOME_SUCCESS.differs(po)) {
+			System.out.println(po.toString());
+			return false;
+		} else {
+			return true;
+		}
 	}
 
 	private void db_destroy() {
@@ -626,9 +676,13 @@ public class QosManagerTool extends BaseGridTool
 			Class.forName("org.sqlite.JDBC");
 			conn = DriverManager.getConnection("jdbc:sqlite:" + db_local_path());
 
+			System.out.println("----------------------------------------");
 			if (verbose == true) {
-				System.out.println("----------------------------------------");
 				System.out.println("(qm) db: QoS Database Details:");
+
+				System.out.println("  ** QOS DB PATHS:");
+				System.out.println("   - grid:" + db_grid_path());
+				System.out.println("   - local:" + db_local_path());
 
 				stmt = conn.createStatement();
 
@@ -713,9 +767,11 @@ public class QosManagerTool extends BaseGridTool
 				}
 
 			} else { // verbose == false
-
-				System.out.println("----------------------------------------");
 				System.out.println("(qm) db: QoS Database Summary:");
+
+				System.out.println("  ** QOS DB PATHS:");
+				System.out.println("   - grid:" + db_grid_path());
+				System.out.println("   - local:" + db_local_path());
 
 				stmt = conn.createStatement();
 
@@ -787,7 +843,7 @@ public class QosManagerTool extends BaseGridTool
 					String status_sql_str = status.to_sql_string();
 					sql = "INSERT INTO Containers VALUES (" + status_sql_str + ");";
 					stmt.executeUpdate(sql);
-					
+
 				}
 				else{
 					// Insert new container
