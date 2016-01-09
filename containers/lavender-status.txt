@@ -17,5 +17,5 @@ ContainerAvailability, 90
 StorageRBW_dyn, 0.0	# MB/s
 StorageWBW_dyn, 0.0	# MB/s
 PhysicalLocation, /usa/virginia/uva/cs
-NetworkAddress, grid:/home/xcg.virginia.edu/dg7vp/qmsim/containers/lavender
+RnsPath, grid:/home/xcg.virginia.edu/dg7vp/qmsim/containers/lavender
 StatusPath,

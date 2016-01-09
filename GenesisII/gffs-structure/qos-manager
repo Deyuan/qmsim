@@ -28,5 +28,5 @@ The following options are available:
     Generate a template of a container status file.
 
 Related tools:
-mkdir [--specs=<qos-spec-path>]
+mkdir <target-dir> [--specs=<qos-spec-path>]
     Create a dynamically scheduled folder with a QoS specification file.

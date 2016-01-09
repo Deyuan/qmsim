@@ -319,19 +319,19 @@ def test():
 
     status = itf_status.ContainerStatus()
     status.ContainerId = "container1"
-    status.NetworkAddress = "//aaa"
+    status.RnsPath = "//aaa"
     update_container(status, init=True)
     summary(True)
 
     status = itf_status.ContainerStatus()
     status.ContainerId = "container2"
-    status.NetworkAddress = "//bbb"
+    status.RnsPath = "//bbb"
     update_container(status, init=True)
     summary(True)
 
     status = itf_status.ContainerStatus()
     status.ContainerId = "container1"
-    status.NetworkAddress = "//ccc"
+    status.RnsPath = "//ccc"
     status.StorageTotal = 1000
     update_container(status)
     summary(True)

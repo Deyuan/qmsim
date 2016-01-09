@@ -333,7 +333,7 @@ public class QosManagerTool extends BaseGridTool
 		public double StorageWBW_dyn = 0.0;   // (flt) MB/s. Avg of past 10 min
 		// extra information
 		public String PhysicalLocation = "";  // (str) physical location
-		public String NetworkAddress = "";    // (str) container rns service
+		public String RnsPath = "";           // (str) container rns service
 		public String StatusPath = "";        // (str) status file genii path
 
 		public ContainerStatus() {
@@ -360,7 +360,7 @@ public class QosManagerTool extends BaseGridTool
 				this.StorageRBW_dyn = rs.getDouble(16);
 				this.StorageWBW_dyn = rs.getDouble(17);
 				this.PhysicalLocation = rs.getString(18);
-				this.NetworkAddress = rs.getString(19);
+				this.RnsPath = rs.getString(19);
 				this.StatusPath = rs.getString(20);
 			} catch (Exception e) {
 				System.out.println(e.getClass().getName() + ": " + e.getMessage());
@@ -395,7 +395,7 @@ public class QosManagerTool extends BaseGridTool
 					else if (key.equals("StorageRBW_dyn")) { this.StorageRBW_dyn = Double.parseDouble(val); }
 					else if (key.equals("StorageWBW_dyn")) { this.StorageWBW_dyn = Double.parseDouble(val); }
 					else if (key.equals("PhysicalLocation")) { this.PhysicalLocation = val; }
-					else if (key.equals("NetworkAddress")) { this.NetworkAddress = val; }
+					else if (key.equals("RnsPath")) { this.RnsPath = val; }
 					else if (key.equals("StatusPath")) { this.StatusPath = val; }
 					else {
 						System.out.println("(qm) Warning: unrecognized status key: " + key);
@@ -427,7 +427,7 @@ public class QosManagerTool extends BaseGridTool
 					+ "StorageRBW_dyn"       + ", " + this.StorageRBW_dyn        + "\t# MB/s\n"
 					+ "StorageWBW_dyn"       + ", " + this.StorageWBW_dyn        + "\t# MB/s\n"
 					+ "PhysicalLocation"     + ", " + this.PhysicalLocation      + "\n"
-					+ "NetworkAddress"       + ", " + this.NetworkAddress        + "\n"
+					+ "RnsPath"              + ", " + this.RnsPath               + "\n"
 					+ "StatusPath"           + ", " + this.StatusPath            + "\n";
 			return status_str;
 		}
@@ -500,7 +500,7 @@ public class QosManagerTool extends BaseGridTool
 					"StorageRBW_dyn"        + " REAL," +
 					"StorageWBW_dyn"        + " REAL," +
 					"PhysicalLocation"      + " TEXT," +
-					"NetworkAddress"        + " TEXT," +
+					"RnsPath"               + " TEXT," +
 					"StatusPath"            + " TEXT" +
 					");";
 			return header;
@@ -517,7 +517,7 @@ public class QosManagerTool extends BaseGridTool
 					+ this.StorageReliability + "," + this.ContainerAvailability + ","
 					+ this.StorageRBW_dyn + "," + this.StorageWBW_dyn + ","
 					+ "'" + this.PhysicalLocation + "',"
-					+ "'" + this.NetworkAddress + "','" + this.StatusPath + "'";
+					+ "'" + this.RnsPath + "','" + this.StatusPath + "'";
 			return status_sql_str;
 		}
 	}
@@ -1277,19 +1277,19 @@ public class QosManagerTool extends BaseGridTool
 		System.out.println("#### DB Test 1: Insert container1 into db");
 		ContainerStatus status = new ContainerStatus();
 		status.ContainerId = "container1";
-		status.NetworkAddress = "//aaa";
+		status.RnsPath = "//aaa";
 		db_update_container(status, true);
 		db_summary(true);
 
 		System.out.println("#### DB Test 2: Insert container2 into db");
 		status.ContainerId = "container2";
-		status.NetworkAddress = "//bbb";
+		status.RnsPath = "//bbb";
 		db_update_container(status, true);
 		db_summary(true);
 
 		System.out.println("#### DB Test 3: Update container1 into db");
 		status.ContainerId = "container1";
-		status.NetworkAddress = "//ccc";
+		status.RnsPath = "//ccc";
 		status.StorageTotal = 1000;
 		db_update_container(status, true);
 		db_summary(true);
