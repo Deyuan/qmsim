@@ -22,6 +22,10 @@ The following options are available:
 --monitor
     Monitor all QoS specifications in the QoS database, and reschedule the
     unsatisfied ones.
+--spec-template
+    Generate a template of a QoS specification file.
+--status-template
+    Generate a template of a container status file.
 
 Related tools:
 mkdir [--specs=<qos-spec-path>]
