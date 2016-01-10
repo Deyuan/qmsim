@@ -1230,7 +1230,7 @@ public class QosManagerTool extends BaseGridTool
 		}
 		return container_ids;
 	}
-
+	
 	private List<String> db_get_spec_id_list() {
 		System.out.println("(qm) db: Get specification id list. ");
 		List<String> spec_ids = new ArrayList<String>();
@@ -1309,6 +1309,31 @@ public class QosManagerTool extends BaseGridTool
 		return spec;
 	}
 
+
+	public String db_get_container_RnsPath(String container_id)  {
+		System.out.println("(qm) db: Get RnsPath for . " + container_id);
+		String RnsPath = new String();
+
+		Connection conn = null;
+		Statement stmt = null;
+
+		try {
+			Class.forName("org.sqlite.JDBC");
+			conn = DriverManager.getConnection("jdbc:sqlite:" + db_get_local_path());
+			stmt = conn.createStatement();
+
+			String sql = "SELECT RnsPath From Containers where ContainerId = '" + container_id + "';";
+			ResultSet rs = stmt.executeQuery(sql);
+			RnsPath = rs.getString(1);
+			stmt.close();
+			conn.close();
+		} catch (Exception e) {
+			System.out.println(e.getClass().getName() + ": " + e.getMessage());
+			System.exit(-1);
+		}
+		return RnsPath;
+	}
+	
 	private void test_db() {
 		System.out.println("#### DB Test 0: Show empty QoS database");
 		db_init();
