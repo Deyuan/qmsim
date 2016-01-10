@@ -18,21 +18,33 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import org.morgan.util.io.StreamUtils;
+import javax.xml.namespace.QName;
 
+import org.morgan.util.io.StreamUtils;
+import org.ws.addressing.EndpointReferenceType;
+
+import edu.virginia.vcgr.genii.client.GenesisIIConstants;
 import edu.virginia.vcgr.genii.client.InstallationProperties;
 import edu.virginia.vcgr.genii.client.byteio.ByteIOConstants;
 import edu.virginia.vcgr.genii.client.cmd.ReloadShellException;
 import edu.virginia.vcgr.genii.client.cmd.ToolException;
+import edu.virginia.vcgr.genii.client.context.ContextManager;
 import edu.virginia.vcgr.genii.client.context.GridUserEnvironment;
+import edu.virginia.vcgr.genii.client.context.ICallingContext;
 import edu.virginia.vcgr.genii.client.dialog.UserCancelException;
 import edu.virginia.vcgr.genii.client.gpath.GeniiPath;
 import edu.virginia.vcgr.genii.client.gpath.GeniiPathType;
 import edu.virginia.vcgr.genii.client.io.LoadFileResource;
+import edu.virginia.vcgr.genii.client.naming.WSName;
+import edu.virginia.vcgr.genii.client.resource.AddressingParameters;
+import edu.virginia.vcgr.genii.client.resource.TypeInformation;
 import edu.virginia.vcgr.genii.client.rns.PathOutcome;
 import edu.virginia.vcgr.genii.client.rns.RNSException;
+import edu.virginia.vcgr.genii.client.rns.RNSPath;
+import edu.virginia.vcgr.genii.client.rns.RNSPathDoesNotExistException;
 import edu.virginia.vcgr.genii.client.rp.ResourcePropertyException;
 import edu.virginia.vcgr.genii.client.security.axis.AuthZSecurityException;
+import edu.virginia.vcgr.genii.client.ser.ObjectSerializer;
 
 public class QosManagerTool extends BaseGridTool
 {
@@ -1624,10 +1636,14 @@ public class QosManagerTool extends BaseGridTool
 
 	/**************************************************************************
 	 *  QoS Monitors
+	 * @throws IOException 
+	 * @throws FileNotFoundException 
 	 **************************************************************************/
 	// Check if the Resource Naming Service of a grid folder is available.
-	private boolean is_RNS_available(String rns_path) {
+	private boolean is_RNS_available(String rns_path) throws FileNotFoundException, IOException {
 		GeniiPath rnsPath = new GeniiPath(rns_path);
+		//I think here maybe we should use RNSPath instead of GeniiPath
+		//RNSPath rnsPath = new RNSPath(rns_path);
 		if (rnsPath.pathType() != GeniiPathType.Grid) {
 			System.out.println("(qm) monitor: Error: " + rns_path + " is not a grid path.");
 			return false;
@@ -1638,9 +1654,20 @@ public class QosManagerTool extends BaseGridTool
 		//	System.out.println("(qm) monitor: Error: " + rns_path + " is not a RNS path.");
 		//	return false;
 		//}
-
-		//TODO: Check is the rnspath is available. If available, return true;
+		//In RNSPath.java. isRNS to check if it's a RNS path.
+		ICallingContext ctxt = ContextManager.getExistingContext();
+		RNSPath path = ctxt.getCurrentPath();
+		if (path.isRNS()) {
+		System.out.println("(qm) monitor: Error: " + rns_path + " is not a RNS path.");
+		return false;
+		}
+		//TODO: Check if the rnspath is available. If available, return true;
 		//reference: MkdirTool.java
+		//There is an exist function in RNSPath.java, I think this should work for this, not 100% sure.
+		
+		if (path.exists()) {
+			return true;
+		}
 
 		return false;
 	}
@@ -1716,12 +1743,21 @@ public class QosManagerTool extends BaseGridTool
 
 	/**************************************************************************
 	 *  Misc Functions
+	 * @throws IOException 
+	 * @throws FileNotFoundException 
+	 * @throws RNSPathDoesNotExistException 
 	 **************************************************************************/
-	private ContainerStatus gen_status_template(String rns_path) {
+	private ContainerStatus gen_status_template(String rns_path) throws FileNotFoundException, IOException, RNSPathDoesNotExistException {
 		ContainerStatus status = new ContainerStatus();
 		// TODO: Get the EPI (globally unique string) of the rns_path as Id:
 		// status.ContainerId = EPI
-
+		ICallingContext ctxt = ContextManager.getExistingContext();
+		RNSPath path = ctxt.getCurrentPath();
+	
+		EndpointReferenceType epr = path.getEndpoint();
+		WSName wsname = new WSName(epr);
+		status.ContainerId = wsname.getEndpointIdentifier().toString();
+			
 		if (is_RNS_available(rns_path)) {
 			status.ContainerAvailability = 90;
 		} else {
