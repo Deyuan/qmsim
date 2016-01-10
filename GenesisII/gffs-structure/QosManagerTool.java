@@ -1583,7 +1583,7 @@ public class QosManagerTool extends BaseGridTool
 		// try 2 containers
 		if (!scheduled) {
 			for (int i = 0; i < status_list.size(); i++) {
-				for (int j = i; j < status_list.size(); j++) {
+				for (int j = i + 1; j < status_list.size(); j++) {
 					tmp.clear();
 					tmp.add(status_list.get(i));
 					tmp.add(status_list.get(j));
@@ -1597,8 +1597,8 @@ public class QosManagerTool extends BaseGridTool
 		// try 3 containers
 		if (!scheduled) {
 			for (int i = 0; i < status_list.size(); i++) {
-				for (int j = i; j < status_list.size(); j++) {
-					for (int k = j; k < status_list.size(); k++) {
+				for (int j = i + 1; j < status_list.size(); j++) {
+					for (int k = j + 1; k < status_list.size(); k++) {
 						tmp.clear();
 						tmp.add(status_list.get(i));
 						tmp.add(status_list.get(j));
@@ -1614,9 +1614,9 @@ public class QosManagerTool extends BaseGridTool
 		// try 4 containers
 		if (!scheduled) {
 			for (int i = 0; i < status_list.size(); i++) {
-				for (int j = i; j < status_list.size(); j++) {
-					for (int k = j; k < status_list.size(); k++) {
-						for (int l = k; l < status_list.size(); l++) {
+				for (int j = i + 1; j < status_list.size(); j++) {
+					for (int k = j + 1; k < status_list.size(); k++) {
+						for (int l = k + 1; l < status_list.size(); l++) {
 							tmp.clear();
 							tmp.add(status_list.get(i));
 							tmp.add(status_list.get(j));
@@ -1634,7 +1634,7 @@ public class QosManagerTool extends BaseGridTool
 		if (scheduled) {
 			double costs = 0;
 			for (ContainerStatus status: tmp) {
-				scheduled_containers.add(status.ContainerId);
+				scheduled_containers.add(status.RnsPath);
 				costs += status.CostPerGBMonth;
 			}
 			double cost = costs / 1024.0 * spec.ReservedSize;
