@@ -3,19 +3,15 @@ package edu.virginia.vcgr.genii.client.cmd.tools;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.util.List;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.morgan.util.io.StreamUtils;
 import org.oasis_open.docs.wsrf.rl_2.Destroy;
 import org.ws.addressing.EndpointReferenceType;
 
 import edu.virginia.vcgr.genii.client.WellKnownPortTypes;
-import edu.virginia.vcgr.genii.client.byteio.ByteIOConstants;
 import edu.virginia.vcgr.genii.client.cmd.InvalidToolUsageException;
 import edu.virginia.vcgr.genii.client.cmd.ReloadShellException;
 import edu.virginia.vcgr.genii.client.cmd.ToolException;
@@ -104,15 +100,23 @@ public class MkdirTool extends BaseGridTool
 	{
 		boolean createParents = false;
 		EndpointReferenceType service = null;
+		List<String> scheduled_results = null;
 
 		if (specsPath != null) {
-			String msg = "(mkdir) Dynamically scheduling with specifications: " + specsPath;
-			System.out.println(msg);
+			if (pathsToCreate.size() != 1) {
+				System.out.println("(mkdir) qm: Please create one folder a time with --specs.");
+				return 1;
+			}
+			System.out.println("(mkdir) qm: Dynamically scheduling with specifications: " + specsPath);
 			QosManagerTool qos_manager = QosManagerTool.factory();
-			List<String> scheduled_results = qos_manager.schedule(specsPath, null);
-			System.out.println("(mkdir) Schedule results: " + scheduled_results.toString());
-			System.out.println("(mkdir) NYI next step.");
-			return 0;
+			scheduled_results = qos_manager.schedule_wrapper(specsPath, null, pathsToCreate.get(0));
+			if (scheduled_results == null || scheduled_results.size() == 0) {
+				System.out.println("(mkdir) qm: Unable to schedule, please modify the specs or add more available containers to the QoS database.");
+				return 1;
+			} else {
+				System.out.println("(mkdir) qm: Scheduling results: " + scheduled_results.toString());
+			}
+			rnsService = scheduled_results.get(0);
 		}
 
 		if (rnsService != null) {
@@ -198,6 +202,15 @@ public class MkdirTool extends BaseGridTool
 				}
 			}
 		}
+
+		if (specsPath != null) {
+			System.out.println("(mkdir) qm: Post-processing NYI.");
+			// TODO: when reaching here, the folder is created successfully.
+			// TODO: Tell qos-manager that the folder is created. (maybe
+			//       another table in the db?). This information is for rescheduling.
+			// TODO: Set replicate and resolver.
+		}
+
 		return 0;
 	}
 }

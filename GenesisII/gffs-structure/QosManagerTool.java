@@ -27,6 +27,7 @@ import edu.virginia.vcgr.genii.client.cmd.ToolException;
 import edu.virginia.vcgr.genii.client.context.GridUserEnvironment;
 import edu.virginia.vcgr.genii.client.dialog.UserCancelException;
 import edu.virginia.vcgr.genii.client.gpath.GeniiPath;
+import edu.virginia.vcgr.genii.client.gpath.GeniiPathType;
 import edu.virginia.vcgr.genii.client.io.LoadFileResource;
 import edu.virginia.vcgr.genii.client.rns.PathOutcome;
 import edu.virginia.vcgr.genii.client.rns.RNSException;
@@ -56,7 +57,7 @@ public class QosManagerTool extends BaseGridTool
 	private boolean _init_db = false;
 	private boolean _monitor = false;
 	private boolean _spec_template = false;
-	private boolean _status_template = false;
+	private String _status_template = null;
 	private boolean _test = false;
 
 	private String _gridHomeDir = null;
@@ -125,13 +126,13 @@ public class QosManagerTool extends BaseGridTool
 	}
 
 	@Option({ "status-template" })
-	public void set_status_template()
+	public void set_status_template(String rns_path)
 	{
-		_status_template = true;
+		_status_template = rns_path;
 	}
 
 	@Option({ "test" })
-	public void set_test_db()
+	public void set_test()
 	{
 		_test = true;
 	}
@@ -553,6 +554,7 @@ public class QosManagerTool extends BaseGridTool
 				succ = db_sync_down();
 				if (succ) {
 					db_update_container(status, true); // init
+					monitor_specs_on_container(status.ContainerId);
 					db_sync_up();
 				}
 			}
@@ -596,8 +598,8 @@ public class QosManagerTool extends BaseGridTool
 		} else if (_spec_template) {
 			QosSpec spec = new QosSpec();
 			System.out.println(spec.to_string());
-		} else if (_status_template) {
-			ContainerStatus status = new ContainerStatus();
+		} else if (_status_template != null) {
+			ContainerStatus status = gen_status_template(_status_template);
 			System.out.println(status.to_string());
 		} else if (_test) {
 			System.out.println("(qm) internal: Test the QoS manager.");
@@ -693,6 +695,8 @@ public class QosManagerTool extends BaseGridTool
 			stmt.executeUpdate(create_spec_table);
 			stmt.executeUpdate(create_status_table);
 
+			// TODO: we may need to store an integer to indicate which one is
+			// the primary and which one is the resolver
 			String sql = "CREATE TABLE Relationships(SpecId TEXT, ContainerId TEXT, UNIQUE(SpecId, ContainerId) ON CONFLICT REPLACE);";
 			stmt.executeUpdate(sql);
 			stmt.close();
@@ -861,7 +865,6 @@ public class QosManagerTool extends BaseGridTool
 
 			assert (status != null);
 
-			// TODO: check satisfiability of specs related to this container.
 			if (init) {
 				String sql = "SELECT * FROM Containers WHERE ContainerId = '" + status.ContainerId + "';";
 				ResultSet rs = stmt.executeQuery(sql);
@@ -879,9 +882,7 @@ public class QosManagerTool extends BaseGridTool
 					String status_sql_str = status.to_sql_string();
 					sql = "INSERT INTO Containers VALUES (" + status_sql_str + ");";
 					stmt.executeUpdate(sql);
-
-				}
-				else{
+				} else {
 					// Insert new container
 					System.out.println("(qm) db: Insert status of new container: " + status.ContainerId);
 					String status_sql_str = status.to_sql_string();
@@ -1504,7 +1505,7 @@ public class QosManagerTool extends BaseGridTool
 	}
 
 	// return a list of scheduled container ids
-	public List<String> schedule(String spec_path, String spec_id) {
+	private List<String> schedule(String spec_path, String spec_id) {
 		assert(spec_path == null && spec_id != null || spec_path != null && spec_id == null);
 		List<String> scheduled_containers = new ArrayList<String>();
 		QosSpec spec = null;
@@ -1603,9 +1604,47 @@ public class QosManagerTool extends BaseGridTool
 		return scheduled_containers;
 	}
 
+	// Wrapper for calling the QoS scheduler from other files.
+	public List<String> schedule_wrapper(String spec_path, String spec_id, String target_path) {
+		assert(spec_path == null && spec_id != null || spec_path != null && spec_id == null);
+		List<String> scheduled_containers = new ArrayList<String>();
+		if (spec_path != null) {
+			System.out.println("(qm) scheduler: Schedule a QoS spec file " + spec_path);
+		} else if (spec_id != null) {
+			System.out.println("(qm) scheduler: Reschedule a spec id " + spec_id);
+		}
+		boolean succ = db_sync_down();
+		if (succ) {
+			scheduled_containers = schedule(spec_path, spec_id);
+			db_sync_up();
+		}
+		// TODO: for rescheduling, we may need to store the target_path into db
+		return scheduled_containers;
+	}
+
 	/**************************************************************************
 	 *  QoS Monitors
 	 **************************************************************************/
+	// Check if the Resource Naming Service of a grid folder is available.
+	private boolean is_RNS_available(String rns_path) {
+		GeniiPath rnsPath = new GeniiPath(rns_path);
+		if (rnsPath.pathType() != GeniiPathType.Grid) {
+			System.out.println("(qm) monitor: Error: " + rns_path + " is not a grid path.");
+			return false;
+		}
+		//TODO: Check if rnspath is a RNS path
+		//TypeInformation typeInfo = new TypeInformation(rnsPath.getEndPoint());
+		//if (!typeInfo.isRNS()) {
+		//	System.out.println("(qm) monitor: Error: " + rns_path + " is not a RNS path.");
+		//	return false;
+		//}
+
+		//TODO: Check is the rnspath is available. If available, return true;
+		//reference: MkdirTool.java
+
+		return false;
+	}
+
 	// Monitor a qos spec
 	private boolean monitor_spec(String spec_id) {
 		List<String> container_ids = db_get_container_ids_for_spec(spec_id);
@@ -1639,27 +1678,56 @@ public class QosManagerTool extends BaseGridTool
 		ContainerStatus status_remote = new ContainerStatus();
 		boolean succ = status_remote.read_from_file(status_in_db.StatusPath);
 		if (!succ) {
-			System.out.println("(qm) monitor: Container " + container_id +
-					" is not available.");
-			// TODO: update database and reschedule
-			return false;
+			System.out.println("(qm) monitor: Warning: Cannot access the status file of " + container_id);
+			// Check the availability of RNS path anyway
+			if (!is_RNS_available(status_in_db.RnsPath)) {
+				System.out.println("(qm) monitor: Warning: " + container_id + " is not available.");
+				status_in_db.ContainerAvailability = 0;
+			}
+			db_update_container(status_in_db, false);
 		} else {
+			assert(status_remote.ContainerId.equals(status_in_db.ContainerId) &&
+					status_remote.RnsPath.equals(status_in_db.RnsPath));
+			if (!is_RNS_available(status_remote.RnsPath)) {
+				System.out.println("(qm) monitor: Warning: " + container_id + " is not available.");
+				status_remote.ContainerAvailability = 0;
+			}
 			// Avoid overwriting the reserved size (container doesn't know this)
 			status_remote.StorageReserved = status_in_db.StorageReserved;
 			db_update_container(status_remote, false);
-			// Call QoS Monitor
-			System.out.println("(qm) monitor: Call QoS Monitor for " + container_id);
-			monitor_specs_on_container(container_id);
 		}
 		return true;
 	}
 
 	// Monitor all containers in the qos database.
 	private boolean monitor_all() {
+		// Step 1: update all containers
 		List<String> container_ids = db_get_container_id_list();
 		for (int i = 0; i < container_ids.size(); i++) {
 			monitor_container(container_ids.get(i));
 		}
+		// Step 2: monitor all specs
+		List<String> spec_ids = db_get_spec_id_list();
+		for (int i = 0; i < spec_ids.size(); i++) {
+			monitor_spec(spec_ids.get(i));
+		}
 		return true;
+	}
+
+	/**************************************************************************
+	 *  Misc Functions
+	 **************************************************************************/
+	private ContainerStatus gen_status_template(String rns_path) {
+		ContainerStatus status = new ContainerStatus();
+		// TODO: Get the EPI (globally unique string) of the rns_path as Id:
+		// status.ContainerId = EPI
+
+		if (is_RNS_available(rns_path)) {
+			status.ContainerAvailability = 90;
+		} else {
+			status.ContainerAvailability = 0;
+		}
+		status.RnsPath = rns_path;
+		return status;
 	}
 }

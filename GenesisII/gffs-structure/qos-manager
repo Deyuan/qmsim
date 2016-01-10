@@ -22,10 +22,10 @@ The following options are available:
 --monitor
     Monitor all QoS specifications in the QoS database, and reschedule the
     unsatisfied ones.
+--status-template=<rns-service-path>
+    Generate a template of a container status file for a RNS service path.
 --spec-template
     Generate a template of a QoS specification file.
---status-template
-    Generate a template of a container status file.
 
 Related tools:
 mkdir <target-dir> [--specs=<qos-spec-path>]
