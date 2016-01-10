@@ -18,33 +18,28 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import javax.xml.namespace.QName;
-
 import org.morgan.util.io.StreamUtils;
+import org.oasis_open.docs.wsrf.rp_2.GetResourcePropertyDocument;
 import org.ws.addressing.EndpointReferenceType;
 
-import edu.virginia.vcgr.genii.client.GenesisIIConstants;
 import edu.virginia.vcgr.genii.client.InstallationProperties;
 import edu.virginia.vcgr.genii.client.byteio.ByteIOConstants;
 import edu.virginia.vcgr.genii.client.cmd.ReloadShellException;
 import edu.virginia.vcgr.genii.client.cmd.ToolException;
-import edu.virginia.vcgr.genii.client.context.ContextManager;
+import edu.virginia.vcgr.genii.client.comm.ClientUtils;
 import edu.virginia.vcgr.genii.client.context.GridUserEnvironment;
-import edu.virginia.vcgr.genii.client.context.ICallingContext;
 import edu.virginia.vcgr.genii.client.dialog.UserCancelException;
 import edu.virginia.vcgr.genii.client.gpath.GeniiPath;
 import edu.virginia.vcgr.genii.client.gpath.GeniiPathType;
 import edu.virginia.vcgr.genii.client.io.LoadFileResource;
 import edu.virginia.vcgr.genii.client.naming.WSName;
-import edu.virginia.vcgr.genii.client.resource.AddressingParameters;
-import edu.virginia.vcgr.genii.client.resource.TypeInformation;
 import edu.virginia.vcgr.genii.client.rns.PathOutcome;
 import edu.virginia.vcgr.genii.client.rns.RNSException;
 import edu.virginia.vcgr.genii.client.rns.RNSPath;
-import edu.virginia.vcgr.genii.client.rns.RNSPathDoesNotExistException;
+import edu.virginia.vcgr.genii.client.rns.RNSPathQueryFlags;
 import edu.virginia.vcgr.genii.client.rp.ResourcePropertyException;
 import edu.virginia.vcgr.genii.client.security.axis.AuthZSecurityException;
-import edu.virginia.vcgr.genii.client.ser.ObjectSerializer;
+import edu.virginia.vcgr.genii.common.GeniiCommon;
 
 public class QosManagerTool extends BaseGridTool
 {
@@ -563,11 +558,16 @@ public class QosManagerTool extends BaseGridTool
 			ContainerStatus status = new ContainerStatus();
 			succ = status.read_from_file(_status_path_to_add);
 			if (succ) {
-				succ = db_sync_down();
-				if (succ) {
-					db_update_container(status, true); // init
-					monitor_specs_on_container(status.ContainerId);
-					db_sync_up();
+				if (is_rns_valid(status.RnsPath) && is_rns_available(status.RnsPath)) {
+					succ = db_sync_down();
+					if (succ) {
+						db_update_container(status, true); // init
+						monitor_specs_on_container(status.ContainerId);
+						db_sync_up();
+					}
+				} else {
+					System.out.println("(qm) main: " + _status_path_to_add
+							+ " is not added to the QoS database.");
 				}
 			}
 		} else if (_container_id_to_remove != null) {
@@ -592,10 +592,12 @@ public class QosManagerTool extends BaseGridTool
 			}
 		} else if (_init_db) {
 			System.out.println("(qm) main: Initialize the QoS database.");
-			GeniiPath dbFile = new GeniiPath(db_grid_path());
+			String db_grid_path = db_get_grid_path();
+			if (db_grid_path == null) return;
+			GeniiPath dbFile = new GeniiPath(db_grid_path);
 			if (dbFile.exists()) {
 				System.out.println("(qm) Warning: QoS database already exists. To rebuild an empty");
-				System.out.println("     QoS database, please remove grid:" + db_grid_path());
+				System.out.println("     QoS database, please remove grid:" + db_grid_path);
 			} else {
 				db_init();
 				db_sync_up();
@@ -612,7 +614,9 @@ public class QosManagerTool extends BaseGridTool
 			System.out.println(spec.to_string());
 		} else if (_status_template != null) {
 			ContainerStatus status = gen_status_template(_status_template);
-			System.out.println(status.to_string());
+			if (status != null) {
+				System.out.println(status.to_string());
+			}
 		} else if (_test) {
 			System.out.println("(qm) internal: Test the QoS manager.");
 			succ = db_sync_down();
@@ -628,30 +632,43 @@ public class QosManagerTool extends BaseGridTool
 	/**************************************************************************
 	 *  QoS Database Interfaces
 	 **************************************************************************/
-	private String db_grid_path() {
+	private String db_get_grid_path() {
 		if (this._gridHomeDir == null) {
 			Map<String, String> env = GridUserEnvironment.getGridUserEnvironment();
 			this._gridHomeDir = env.get("HOME");
+			if (this._gridHomeDir == null) {
+				System.out.println("(qm) Error: HOME variable undefined.");
+				return null;
+			}
 		}
 		return this._gridHomeDir + "/" + this._qosDbName;
 	}
 
-	private String db_local_path() {
+	private String db_get_local_path() {
 		if (this._localUserDir == null) {
 			this._localUserDir = InstallationProperties.getUserDir();
+			if (this._localUserDir == null) {
+				System.out.println("(qm) Error: Cannot get user local directory.");
+				return null;
+			}
 		}
 		return this._localUserDir + "/" + this._qosDbName;
 	}
 
 	private boolean db_sync_down() {
-		GeniiPath dbFile = new GeniiPath(db_grid_path());
+		String db_grid_path = db_get_grid_path();
+		String db_local_path = db_get_local_path();
+		if (db_grid_path == null || db_local_path == null) {
+			return false;
+		}
+		GeniiPath dbFile = new GeniiPath(db_grid_path);
 		if (!dbFile.exists()) {
 			System.out.println("(qm) db: Please run 'qos-manager --init-db' to initialize the QoS database.");
 			return false;
 		}
 		System.out.println("(qm) db: Sync from grid to local.");
-		PathOutcome po = CopyTool.copy("grid:" + db_grid_path(),
-				"local:" + db_local_path(), false, true, null, stderr);
+		PathOutcome po = CopyTool.copy("grid:" + db_grid_path,
+				"local:" + db_local_path, false, true, null, stderr);
 		if (PathOutcome.OUTCOME_SUCCESS.differs(po)) {
 			System.out.println(po.toString());
 			return false;
@@ -661,14 +678,19 @@ public class QosManagerTool extends BaseGridTool
 	}
 
 	private boolean db_sync_up() {
-		File dbFile = new File(db_local_path());
+		String db_grid_path = db_get_grid_path();
+		String db_local_path = db_get_local_path();
+		if (db_grid_path == null || db_local_path == null) {
+			return false;
+		}
+		File dbFile = new File(db_local_path);
 		if (!dbFile.exists()) {
-			System.out.println("(qm) db: Error: Cannot find local:" + db_local_path());
+			System.out.println("(qm) db: Error: Cannot find local:" + db_local_path);
 			return false;
 		}
 		System.out.println("(qm) db: Sync from local to grid.");
-		PathOutcome po = CopyTool.copy("local:" + db_local_path(),
-				"grid:" + db_grid_path(), false, true, null, stderr);
+		PathOutcome po = CopyTool.copy("local:" + db_local_path,
+				"grid:" + db_grid_path, false, true, null, stderr);
 		if (PathOutcome.OUTCOME_SUCCESS.differs(po)) {
 			System.out.println(po.toString());
 			return false;
@@ -677,15 +699,21 @@ public class QosManagerTool extends BaseGridTool
 		}
 	}
 
-	private void db_destroy() {
+	private boolean db_destroy() {
+		String db_grid_path = db_get_grid_path();
+		String db_local_path = db_get_local_path();
+		if (db_grid_path == null || db_local_path == null) {
+			return false;
+		}
+		GeniiPath dbFileGrid = new GeniiPath(db_grid_path);
 		// The qos.db file in grid home directory should be removed by hand
-		GeniiPath dbFileGrid = new GeniiPath(db_grid_path());
 		assert(!dbFileGrid.exists());
 
-		File dbFileLocal = new File(db_local_path());
+		File dbFileLocal = new File(db_local_path);
 		if (dbFileLocal.exists()) {
 			dbFileLocal.delete();
 		}
+		return true;
 	}
 
 	private boolean db_init() {
@@ -695,7 +723,7 @@ public class QosManagerTool extends BaseGridTool
 		Statement stmt = null;
 		try {
 			Class.forName("org.sqlite.JDBC");
-			conn = DriverManager.getConnection("jdbc:sqlite:" + db_local_path());
+			conn = DriverManager.getConnection("jdbc:sqlite:" + db_get_local_path());
 			System.out.println("(qm) db: Connect to QoS DB successfully.");
 			stmt = conn.createStatement();
 
@@ -725,15 +753,15 @@ public class QosManagerTool extends BaseGridTool
 		Statement stmt = null;
 		try {
 			Class.forName("org.sqlite.JDBC");
-			conn = DriverManager.getConnection("jdbc:sqlite:" + db_local_path());
+			conn = DriverManager.getConnection("jdbc:sqlite:" + db_get_local_path());
 
 			System.out.println("----------------------------------------");
 			if (verbose == true) {
 				System.out.println("(qm) db: QoS Database Details:");
 
 				System.out.println("  ** QOS DB PATHS:");
-				System.out.println("   - grid:" + db_grid_path());
-				System.out.println("   - local:" + db_local_path());
+				System.out.println("   - grid:" + db_get_grid_path());
+				System.out.println("   - local:" + db_get_local_path());
 
 				stmt = conn.createStatement();
 
@@ -821,8 +849,8 @@ public class QosManagerTool extends BaseGridTool
 				System.out.println("(qm) db: QoS Database Summary:");
 
 				System.out.println("  ** QOS DB PATHS:");
-				System.out.println("   - grid:" + db_grid_path());
-				System.out.println("   - local:" + db_local_path());
+				System.out.println("   - grid:" + db_get_grid_path());
+				System.out.println("   - local:" + db_get_local_path());
 
 				stmt = conn.createStatement();
 
@@ -872,7 +900,7 @@ public class QosManagerTool extends BaseGridTool
 		Statement stmt = null;
 		try {
 			Class.forName("org.sqlite.JDBC");
-			conn = DriverManager.getConnection("jdbc:sqlite:" + db_local_path());
+			conn = DriverManager.getConnection("jdbc:sqlite:" + db_get_local_path());
 			stmt = conn.createStatement();
 
 			assert (status != null);
@@ -937,7 +965,7 @@ public class QosManagerTool extends BaseGridTool
 		// TODO: file copy
 		try {
 			Class.forName("org.sqlite.JDBC");
-			conn = DriverManager.getConnection("jdbc:sqlite:" + db_local_path());
+			conn = DriverManager.getConnection("jdbc:sqlite:" + db_get_local_path());
 			stmt = conn.createStatement();
 
 			if (init) {
@@ -1045,7 +1073,7 @@ public class QosManagerTool extends BaseGridTool
 
 		try {
 			Class.forName("org.sqlite.JDBC");
-			conn = DriverManager.getConnection("jdbc:sqlite:" + db_local_path());
+			conn = DriverManager.getConnection("jdbc:sqlite:" + db_get_local_path());
 			stmt = conn.createStatement();
 
 			String sql = "SELECT ReservedSize FROM Specifications WHERE SpecId = '" + spec_id + "';";
@@ -1094,7 +1122,7 @@ public class QosManagerTool extends BaseGridTool
 
 		try {
 			Class.forName("org.sqlite.JDBC");
-			conn = DriverManager.getConnection("jdbc:sqlite:" + db_local_path());
+			conn = DriverManager.getConnection("jdbc:sqlite:" + db_get_local_path());
 			stmt = conn.createStatement();
 
 			String sql = "SELECT * FROM Containers WHERE ContainerId = '" + container_id + "';";
@@ -1134,7 +1162,7 @@ public class QosManagerTool extends BaseGridTool
 
 		try {
 			Class.forName("org.sqlite.JDBC");
-			conn = DriverManager.getConnection("jdbc:sqlite:" + db_local_path());
+			conn = DriverManager.getConnection("jdbc:sqlite:" + db_get_local_path());
 			stmt = conn.createStatement();
 
 			String sql = "SELECT ContainerId FROM Relationships WHERE SpecId = '" + spec_id + "';";
@@ -1160,7 +1188,7 @@ public class QosManagerTool extends BaseGridTool
 
 		try {
 			Class.forName("org.sqlite.JDBC");
-			conn = DriverManager.getConnection("jdbc:sqlite:" + db_local_path());
+			conn = DriverManager.getConnection("jdbc:sqlite:" + db_get_local_path());
 			stmt = conn.createStatement();
 
 			String sql = "SELECT SpecId FROM Relationships WHERE ContainerId = '" + container_id + "';";
@@ -1186,7 +1214,7 @@ public class QosManagerTool extends BaseGridTool
 
 		try {
 			Class.forName("org.sqlite.JDBC");
-			conn = DriverManager.getConnection("jdbc:sqlite:" + db_local_path());
+			conn = DriverManager.getConnection("jdbc:sqlite:" + db_get_local_path());
 			stmt = conn.createStatement();
 
 			String sql = "SELECT ContainerId From Containers;";
@@ -1212,7 +1240,7 @@ public class QosManagerTool extends BaseGridTool
 
 		try {
 			Class.forName("org.sqlite.JDBC");
-			conn = DriverManager.getConnection("jdbc:sqlite:" + db_local_path());
+			conn = DriverManager.getConnection("jdbc:sqlite:" + db_get_local_path());
 			stmt = conn.createStatement();
 
 			String sql = "SELECT SpecId From Specifications;";
@@ -1238,7 +1266,7 @@ public class QosManagerTool extends BaseGridTool
 
 		try {
 			Class.forName("org.sqlite.JDBC");
-			conn = DriverManager.getConnection("jdbc:sqlite:" + db_local_path());
+			conn = DriverManager.getConnection("jdbc:sqlite:" + db_get_local_path());
 			stmt = conn.createStatement();
 
 			String sql = "SELECT * FROM Containers WHERE ContainerId = '" + container_id + "';";
@@ -1264,7 +1292,7 @@ public class QosManagerTool extends BaseGridTool
 
 		try {
 			Class.forName("org.sqlite.JDBC");
-			conn = DriverManager.getConnection("jdbc:sqlite:" + db_local_path());
+			conn = DriverManager.getConnection("jdbc:sqlite:" + db_get_local_path());
 			stmt = conn.createStatement();
 
 			String sql = "SELECT * FROM Specifications WHERE SpecId = '" + spec_id + "';";
@@ -1636,40 +1664,48 @@ public class QosManagerTool extends BaseGridTool
 
 	/**************************************************************************
 	 *  QoS Monitors
-	 * @throws IOException 
-	 * @throws FileNotFoundException 
 	 **************************************************************************/
-	// Check if the Resource Naming Service of a grid folder is available.
-	private boolean is_RNS_available(String rns_path) throws FileNotFoundException, IOException {
-		GeniiPath rnsPath = new GeniiPath(rns_path);
-		//I think here maybe we should use RNSPath instead of GeniiPath
-		//RNSPath rnsPath = new RNSPath(rns_path);
-		if (rnsPath.pathType() != GeniiPathType.Grid) {
-			System.out.println("(qm) monitor: Error: " + rns_path + " is not a grid path.");
+	// Check if the RNS is valid
+	private boolean is_rns_valid(String rns_path) {
+		GeniiPath path = new GeniiPath(rns_path);
+		// should be a grid path
+		if (path.pathType() != GeniiPathType.Grid) {
+			System.out.println("(qm) Error: " + rns_path + " is not a grid path.");
 			return false;
 		}
-		//TODO: Check if rnspath is a RNS path
-		//TypeInformation typeInfo = new TypeInformation(rnsPath.getEndPoint());
-		//if (!typeInfo.isRNS()) {
-		//	System.out.println("(qm) monitor: Error: " + rns_path + " is not a RNS path.");
-		//	return false;
-		//}
-		//In RNSPath.java. isRNS to check if it's a RNS path.
-		ICallingContext ctxt = ContextManager.getExistingContext();
-		RNSPath path = ctxt.getCurrentPath();
-		if (path.isRNS()) {
-		System.out.println("(qm) monitor: Error: " + rns_path + " is not a RNS path.");
-		return false;
+		// should exist
+		if (!path.exists()) {
+			System.out.println("(qm) Error: " + rns_path + " does not exist.");
+			return false;
 		}
-		//TODO: Check if the rnspath is available. If available, return true;
-		//reference: MkdirTool.java
-		//There is an exist function in RNSPath.java, I think this should work for this, not 100% sure.
-		
-		if (path.exists()) {
-			return true;
+		// should be a directory
+		if (!path.isDirectory()) {
+			System.out.println("(qm) Error: " + rns_path + " is not a directory.");
+			return false;
+		}
+		return true;
+	}
+
+	// Check if the Resource Naming Service of a grid folder is available.
+	private boolean is_rns_available(String rns_path) {
+		if (!is_rns_valid(rns_path)) {
+			return false;
 		}
 
-		return false;
+		// test availability - false if not available or no access permission
+		try {
+			GeniiPath gPath = new GeniiPath(rns_path);
+			RNSPath current = RNSPath.getCurrent();
+			RNSPath rns = current.lookup(gPath.path(), RNSPathQueryFlags.MUST_EXIST);
+			EndpointReferenceType service = rns.getEndpoint();
+			GeniiCommon common = ClientUtils.createProxy(GeniiCommon.class, service);
+			common.getResourcePropertyDocument(new GetResourcePropertyDocument());
+		} catch (Exception e) {
+			System.out.println("(qm) Warning: " + rns_path + " is not available.");
+			return false;
+		}
+
+		return true;
 	}
 
 	// Monitor a qos spec
@@ -1707,7 +1743,7 @@ public class QosManagerTool extends BaseGridTool
 		if (!succ) {
 			System.out.println("(qm) monitor: Warning: Cannot access the status file of " + container_id);
 			// Check the availability of RNS path anyway
-			if (!is_RNS_available(status_in_db.RnsPath)) {
+			if (!is_rns_available(status_in_db.RnsPath)) {
 				System.out.println("(qm) monitor: Warning: " + container_id + " is not available.");
 				status_in_db.ContainerAvailability = 0;
 			}
@@ -1715,7 +1751,7 @@ public class QosManagerTool extends BaseGridTool
 		} else {
 			assert(status_remote.ContainerId.equals(status_in_db.ContainerId) &&
 					status_remote.RnsPath.equals(status_in_db.RnsPath));
-			if (!is_RNS_available(status_remote.RnsPath)) {
+			if (!is_rns_available(status_remote.RnsPath)) {
 				System.out.println("(qm) monitor: Warning: " + container_id + " is not available.");
 				status_remote.ContainerAvailability = 0;
 			}
@@ -1742,28 +1778,51 @@ public class QosManagerTool extends BaseGridTool
 	}
 
 	/**************************************************************************
-	 *  Misc Functions
-	 * @throws IOException 
-	 * @throws FileNotFoundException 
-	 * @throws RNSPathDoesNotExistException 
+	 *  Miscellaneous Functions
 	 **************************************************************************/
-	private ContainerStatus gen_status_template(String rns_path) throws FileNotFoundException, IOException, RNSPathDoesNotExistException {
+	// Get the end point identifier of a path
+	private String get_epi(String path) {
+		GeniiPath gPath = new GeniiPath(path);
+		String epi = null;
+		try {
+			RNSPath current = RNSPath.getCurrent();
+			RNSPath rns = current.lookup(gPath.path(), RNSPathQueryFlags.MUST_EXIST);
+
+			EndpointReferenceType epr = rns.getEndpoint();
+			WSName wsname = new WSName(epr);
+			epi = wsname.getEndpointIdentifier().toString();
+		} catch (Exception e) {
+			System.out.println("(qm) Error: Cannot get EPI of " + path);
+			System.out.println(e.toString());
+			epi = null;
+		}
+		return epi;
+	}
+
+	// For the --status-template=<rns-path> option.
+	private ContainerStatus gen_status_template(String rns_path) {
+		if (!is_rns_valid(rns_path)) {
+			return null;
+		}
+
+		// Set EPI as the container ID
 		ContainerStatus status = new ContainerStatus();
-		// TODO: Get the EPI (globally unique string) of the rns_path as Id:
-		// status.ContainerId = EPI
-		ICallingContext ctxt = ContextManager.getExistingContext();
-		RNSPath path = ctxt.getCurrentPath();
-	
-		EndpointReferenceType epr = path.getEndpoint();
-		WSName wsname = new WSName(epr);
-		status.ContainerId = wsname.getEndpointIdentifier().toString();
-			
-		if (is_RNS_available(rns_path)) {
+		String epi = get_epi(rns_path);
+		if (epi == null) {
+			return null;
+		}
+		status.ContainerId = epi;
+
+		// Availability
+		if (is_rns_available(rns_path)) {
 			status.ContainerAvailability = 90;
 		} else {
 			status.ContainerAvailability = 0;
 		}
-		status.RnsPath = rns_path;
+
+		// Get full grid path
+		GeniiPath rns = new GeniiPath(rns_path);
+		status.RnsPath = "grid:" + rns.lookupRNS();
 		return status;
 	}
 }
