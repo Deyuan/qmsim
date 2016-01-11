@@ -467,6 +467,8 @@ public class QosManagerTool extends BaseGridTool
 					if (succ) {
 						System.out.println("(qm) Get container status from " + status_path);
 						this.StatusPath = "grid:" + path.lookupRNS();
+						GeniiPath rns = new GeniiPath(this.RnsPath);
+						this.RnsPath = "grid:" + rns.lookupRNS();
 						return true;
 					}
 				}
