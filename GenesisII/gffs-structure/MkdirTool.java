@@ -96,7 +96,7 @@ public class MkdirTool extends BaseGridTool
 	}
 
 	public static int makeDirectory(boolean parents, String rnsService, String specsPath, List<String> pathsToCreate, PrintWriter stderr) throws RNSException,
-		InvalidToolUsageException, FileNotFoundException, IOException
+	InvalidToolUsageException, FileNotFoundException, IOException
 	{
 		boolean createParents = false;
 		EndpointReferenceType service = null;
@@ -210,25 +210,28 @@ public class MkdirTool extends BaseGridTool
 			//       another table in the db?). This information is for rescheduling.
 			// TODO: Set replicate and resolver.
 
-			rnsService = scheduled_results.get(0);
-
-			if (scheduled_results.size() == 1) {
-				//no need to replicate
-			}
 			if (scheduled_results.size() > 1) {
-				//set replicate
-				//get primary RNSPath
-				//I'm not sure if scheduled_results.get(0) is the RnsPath, if yes, we don't need to add db_get_container_RnsPath
-				//QosManagerTool.java
-				//Besides, I'm not sure if the sourcePath should be a RnsPath
-				String sourcePath = qos_manager.db_get_container_RnsPath(scheduled_results.get(0));
+				//set resolver first
+				System.out.println("xxxxxxxxx");
+				//System.out.print(pathsToCreate.get(0));
+				//System.out.print(scheduled_results.get(1));
+				GeniiPath gpath = new GeniiPath(scheduled_results.get(1));
+				//System.out.print(gpath.lookupRNS());
+				try {
+					qos_manager.resolver_policy(pathsToCreate.get(0), gpath.lookupRNS().toString(), true);
+				} catch (Exception e){
+					System.out.println(e.toString());
+				}
 
-				GeniiPath gPath = new GeniiPath(rnsService);
-				RNSPath current = RNSPath.getCurrent();
-				RNSPath rns = current.lookup(gPath.path(), RNSPathQueryFlags.MUST_EXIST);
+				//set replicate
+				System.out.print("##################");
 				for (int i=1;i<scheduled_results.size();i++) {
-					String targetPath = qos_manager.db_get_container_RnsPath(scheduled_results.get(i));
-					CopyTool.copy(sourcePath, targetPath, true, true, rns, stderr);
+					GeniiPath gpath_rep = new GeniiPath(scheduled_results.get(i));
+					try {
+						qos_manager.replicate_policy(pathsToCreate.get(0), gpath_rep.lookupRNS().toString(), null);
+					} catch (Exception e){
+						System.out.println(e.toString());
+					}
 				}
 			}
 		}
