@@ -1334,31 +1334,6 @@ public class QosManagerTool extends BaseGridTool
 		return spec;
 	}
 
-
-	public String db_get_container_RnsPath(String container_id)  {
-		System.out.println("(qm) db: Get RnsPath for . " + container_id);
-		String RnsPath = new String();
-
-		Connection conn = null;
-		Statement stmt = null;
-
-		try {
-			Class.forName("org.sqlite.JDBC");
-			conn = DriverManager.getConnection("jdbc:sqlite:" + db_get_local_path());
-			stmt = conn.createStatement();
-
-			String sql = "SELECT RnsPath From Containers where ContainerId = '" + container_id + "';";
-			ResultSet rs = stmt.executeQuery(sql);
-			RnsPath = rs.getString(1);
-			stmt.close();
-			conn.close();
-		} catch (Exception e) {
-			System.out.println(e.getClass().getName() + ": " + e.getMessage());
-			System.exit(-1);
-		}
-		return RnsPath;
-	}
-
 	private void test_db() {
 		System.out.println("#### DB Test 0: Show empty QoS database");
 		db_init();
@@ -1888,18 +1863,18 @@ public class QosManagerTool extends BaseGridTool
 		WSName sourceName = new WSName(sourceEPR);
 		URI endpointIdentifier = sourceName.getEndpointIdentifier();
 		if (endpointIdentifier == null) {
-			stdout.println("(qm) replicate error: " + sourceRNS + ": EndpointIdentifier not found");
+			System.out.println("(qm) replicate error: " + sourceRNS + ": EndpointIdentifier not found");
 			return (-1);
 		}
 		List<ResolverDescription> resolverList = ResolverUtils.getResolvers(sourceName);
 		if ((resolverList == null) || (resolverList.size() == 0)) {
-			stdout.println("(qm) replication error: " + sourceRNS + ": Resource has no resolver element");
+			System.out.println("(qm) replication error: " + sourceRNS + ": Resource has no resolver element");
 			return (-1);
 		}
 		TypeInformation type = new TypeInformation(sourceEPR);
 		String serviceName = type.getBestMatchServiceName();
 		if (serviceName == null) {
-			stdout.println("(qm) replicate: " + sourceRNS + ": Type does not support replication");
+			System.out.println("(qm) replicate: " + sourceRNS + ": Type does not support replication");
 			return (-1);
 		}
 		String servicePath = containerPath + '/' + "Services" + '/' + serviceName;
@@ -1945,7 +1920,7 @@ public class QosManagerTool extends BaseGridTool
 	// Replicate function based on ReplicateTool.java
 	private void addPolicy(RNSPath currentRNS, Stack<RNSPath> stack) throws RemoteException, RNSException
 	{
-		stdout.println("addPolicy " + currentRNS);
+		System.out.println("(qm) addPolicy " + currentRNS);
 		GeniiCommon dirService = ClientUtils.createProxy(GeniiCommon.class, currentRNS.getEndpoint());
 		MessageElement[] elementArr = new MessageElement[1];
 		elementArr[0] = new MessageElement(GeniiDirPolicy.REPLICATION_POLICY_QNAME, "true");
@@ -1961,7 +1936,7 @@ public class QosManagerTool extends BaseGridTool
 	}
 
 	// Resolver function based on ResolverTool.java.
-	// The save as: resolver -p <source-path> <resolver-path>
+	// The same as: resolver -p <source-path> <resolver-path>
 	public int resolver_policy(String sourcePath, String targetPath, boolean recursive)
 			throws ReloadShellException, ToolException, UserCancelException,
 			RNSException, AuthZSecurityException, IOException, ResourcePropertyException
@@ -1979,13 +1954,13 @@ public class QosManagerTool extends BaseGridTool
 			String servicePath = targetPath + "/Services/GeniiResolverPortType";
 			RNSPath serviceRNS = current.lookup(servicePath, RNSPathQueryFlags.MUST_EXIST);
 			EndpointReferenceType serviceEPR = serviceRNS.getEndpoint();
-			MessageElement[] params = new MessageElement[0];
 			GeniiResolverPortType resolverService = ClientUtils.createProxy(GeniiResolverPortType.class, serviceEPR);
+			MessageElement[] params = new MessageElement[0];
 			VcgrCreateResponse response = resolverService.vcgrCreate(new VcgrCreate(params));
 			resolverEPR = response.getEndpoint();
-			stdout.println("(qm) ResolverTool: Created resolver resource");
+			System.out.println("(qm) ResolverTool: Created resolver resource");
 		} else {
-			stdout.println("(qm) ResolverTool: Failed to find or create resolver at " + targetPath);
+			System.out.println("(qm) ResolverTool: Failed to find or create resolver at " + targetPath);
 			return (-1);
 		}
 		Stack<RNSPath> stack = new Stack<RNSPath>();
@@ -2005,11 +1980,11 @@ public class QosManagerTool extends BaseGridTool
 		EndpointReferenceType sourceEPR = sourceRNS.getEndpoint();
 		WSName sourceName = new WSName(sourceEPR);
 		if (!sourceName.isValidWSName()) {
-			stdout.println(sourceRNS + ": no EPI");
+			System.out.println(sourceRNS + ": no EPI");
 			return;
 		}
 		if (sourceName.hasValidResolver()) {
-			stdout.println(sourceRNS + ": already has resolver");
+			System.out.println(sourceRNS + ": already has resolver");
 			return;
 		}
 		UpdateResponseType response = ResolverUtils.updateResolver(resolverEPR, sourceEPR);
@@ -2025,7 +2000,7 @@ public class QosManagerTool extends BaseGridTool
 		CacheManager.removeItemFromCache(sourceRNS.pwd(), EndpointReferenceType.class);
 		CacheManager.putItemInCache(sourceRNS.pwd(), finalEPR);
 		if (sourceRNS.isRoot()) {
-			stdout.println("Added resolver to root directory.");
+			System.out.println("Added resolver to root directory.");
 			/*
 			 * Store the new EPR in the client's calling context, so this client will see a root directory with a resolver element. Using the
 			 * new EPR, the root directory can be replicated, and failover will work. Other existing clients will continue using the old root

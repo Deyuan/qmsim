@@ -107,6 +107,9 @@ public class MkdirTool extends BaseGridTool
 			if (pathsToCreate.size() != 1) {
 				System.out.println("(mkdir) qm: Please create one folder a time with --specs.");
 				return 1;
+			} else if (new GeniiPath(pathsToCreate.get(0)).exists()) {
+				System.out.println("(mkdir) qm: Path already exists.");
+				return 1;
 			}
 			System.out.println("(mkdir) qm: Dynamically scheduling with specifications: " + specsPath);
 			scheduled_results = qos_manager.schedule_wrapper(specsPath, null, pathsToCreate.get(0));
@@ -204,34 +207,34 @@ public class MkdirTool extends BaseGridTool
 		}
 
 		if (specsPath != null) {
-			System.out.println("(mkdir) qm: Post-processing NYI.");
-			// TODO: when reaching here, the folder is created successfully.
+			System.out.println("(mkdir) qm: Post-processing.");
+			// Note: the target foler is created successfully.
 			// TODO: Tell qos-manager that the folder is created. (maybe
 			//       another table in the db?). This information is for rescheduling.
-			// TODO: Set replicate and resolver.
 
 			if (scheduled_results.size() > 1) {
-				//set resolver first
-				System.out.println("xxxxxxxxx");
-				//System.out.print(pathsToCreate.get(0));
-				//System.out.print(scheduled_results.get(1));
-				GeniiPath gpath = new GeniiPath(scheduled_results.get(1));
-				//System.out.print(gpath.lookupRNS());
+				int err = 0;
 				try {
-					qos_manager.resolver_policy(pathsToCreate.get(0), gpath.lookupRNS().toString(), true);
-				} catch (Exception e){
-					System.out.println(e.toString());
-				}
+					// Create resolver
+					GeniiPath targetPath = new GeniiPath(pathsToCreate.get(0));
+					GeniiPath resolverPath = new GeniiPath(scheduled_results.get(1));
+					assert(targetPath.exists() && resolverPath.exists());
+					System.out.println("(mkdir) qm: Create resolver on " +  resolverPath.lookupRNS());
 
-				//set replicate
-				System.out.print("##################");
-				for (int i=1;i<scheduled_results.size();i++) {
-					GeniiPath gpath_rep = new GeniiPath(scheduled_results.get(i));
-					try {
-						qos_manager.replicate_policy(pathsToCreate.get(0), gpath_rep.lookupRNS().toString(), null);
-					} catch (Exception e){
-						System.out.println(e.toString());
+					err = qos_manager.resolver_policy(targetPath.lookupRNS().toString(), resolverPath.lookupRNS().toString(), true);
+
+					if (err == 0) {
+						// Create replications
+						for (int i = 1; i < scheduled_results.size(); i++) {
+							GeniiPath replicatePath = new GeniiPath(scheduled_results.get(i));
+							System.out.println("(mkdir) qm: Create replication on " +  replicatePath.lookupRNS());
+							err = qos_manager.replicate_policy(targetPath.lookupRNS().toString(), replicatePath.lookupRNS().toString(), null);
+						}
 					}
+				} catch (Exception e) {
+					System.out.println(e.toString());
+					//e.printStackTrace();
+					return -1;
 				}
 			}
 		}
