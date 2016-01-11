@@ -109,7 +109,6 @@ public class MkdirTool extends BaseGridTool
 		EndpointReferenceType service = null;
 		List<String> scheduled_results = null;
 		QosManagerTool qos_manager = QosManagerTool.factory();
-		scheduled_results = qos_manager.schedule_wrapper(specsPath, null, pathsToCreate.get(0));
 		
 		if (specsPath != null) {
 			if (pathsToCreate.size() != 1) {
@@ -117,6 +116,7 @@ public class MkdirTool extends BaseGridTool
 				return 1;
 			}
 			System.out.println("(mkdir) qm: Dynamically scheduling with specifications: " + specsPath);
+			scheduled_results = qos_manager.schedule_wrapper(specsPath, null, pathsToCreate.get(0));
 			if (scheduled_results == null || scheduled_results.size() == 0) {
 				System.out.println("(mkdir) qm: Unable to schedule, please modify the specs or add more available containers to the QoS database.");
 				return 1;
