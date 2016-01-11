@@ -9,37 +9,60 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.rmi.RemoteException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Stack;
 
+import org.apache.axis.message.MessageElement;
+import org.apache.axis.types.URI;
 import org.morgan.util.io.StreamUtils;
 import org.oasis_open.docs.wsrf.rp_2.GetResourcePropertyDocument;
+import org.oasis_open.docs.wsrf.rp_2.InsertResourceProperties;
+import org.oasis_open.docs.wsrf.rp_2.InsertType;
+import org.oasis_open.docs.wsrf.rp_2.UpdateResourceProperties;
+import org.oasis_open.docs.wsrf.rp_2.UpdateType;
 import org.ws.addressing.EndpointReferenceType;
 
 import edu.virginia.vcgr.genii.client.InstallationProperties;
 import edu.virginia.vcgr.genii.client.byteio.ByteIOConstants;
+import edu.virginia.vcgr.genii.client.cache.unified.CacheManager;
 import edu.virginia.vcgr.genii.client.cmd.ReloadShellException;
 import edu.virginia.vcgr.genii.client.cmd.ToolException;
 import edu.virginia.vcgr.genii.client.comm.ClientUtils;
+import edu.virginia.vcgr.genii.client.context.ContextManager;
 import edu.virginia.vcgr.genii.client.context.GridUserEnvironment;
+import edu.virginia.vcgr.genii.client.context.ICallingContext;
 import edu.virginia.vcgr.genii.client.dialog.UserCancelException;
 import edu.virginia.vcgr.genii.client.gpath.GeniiPath;
 import edu.virginia.vcgr.genii.client.gpath.GeniiPathType;
 import edu.virginia.vcgr.genii.client.io.LoadFileResource;
+import edu.virginia.vcgr.genii.client.naming.ResolverDescription;
+import edu.virginia.vcgr.genii.client.naming.ResolverUtils;
 import edu.virginia.vcgr.genii.client.naming.WSName;
+import edu.virginia.vcgr.genii.client.resource.IResource;
+import edu.virginia.vcgr.genii.client.resource.TypeInformation;
+import edu.virginia.vcgr.genii.client.rns.GeniiDirPolicy;
 import edu.virginia.vcgr.genii.client.rns.PathOutcome;
+import edu.virginia.vcgr.genii.client.rns.RNSConstants;
 import edu.virginia.vcgr.genii.client.rns.RNSException;
 import edu.virginia.vcgr.genii.client.rns.RNSPath;
 import edu.virginia.vcgr.genii.client.rns.RNSPathQueryFlags;
 import edu.virginia.vcgr.genii.client.rp.ResourcePropertyException;
 import edu.virginia.vcgr.genii.client.security.axis.AuthZSecurityException;
+import edu.virginia.vcgr.genii.client.security.axis.ResourceSecurityPolicy;
 import edu.virginia.vcgr.genii.common.GeniiCommon;
+import edu.virginia.vcgr.genii.common.rfactory.VcgrCreate;
+import edu.virginia.vcgr.genii.common.rfactory.VcgrCreateResponse;
+import edu.virginia.vcgr.genii.resolver.GeniiResolverPortType;
+import edu.virginia.vcgr.genii.resolver.UpdateResponseType;
 
 public class QosManagerTool extends BaseGridTool
 {
@@ -1232,7 +1255,7 @@ public class QosManagerTool extends BaseGridTool
 		}
 		return container_ids;
 	}
-	
+
 	private List<String> db_get_spec_id_list() {
 		System.out.println("(qm) db: Get specification id list. ");
 		List<String> spec_ids = new ArrayList<String>();
@@ -1335,7 +1358,7 @@ public class QosManagerTool extends BaseGridTool
 		}
 		return RnsPath;
 	}
-	
+
 	private void test_db() {
 		System.out.println("#### DB Test 0: Show empty QoS database");
 		db_init();
@@ -1851,5 +1874,178 @@ public class QosManagerTool extends BaseGridTool
 		GeniiPath rns = new GeniiPath(rns_path);
 		status.RnsPath = "grid:" + rns.lookupRNS();
 		return status;
+	}
+
+	// Replicate function based on ReplicateTool.java.
+	// The save as: replicate -p  <source-path> <container> [replicant number]
+	public int replicate_policy(String sourcePath, String containerPath, String linkPath)
+			throws ReloadShellException, ToolException, UserCancelException,
+			RNSException, AuthZSecurityException, IOException, ResourcePropertyException
+	{
+		RNSPath current = RNSPath.getCurrent();
+		RNSPath sourceRNS = current.lookup(sourcePath, RNSPathQueryFlags.MUST_EXIST);
+		EndpointReferenceType sourceEPR = sourceRNS.getEndpoint();
+		WSName sourceName = new WSName(sourceEPR);
+		URI endpointIdentifier = sourceName.getEndpointIdentifier();
+		if (endpointIdentifier == null) {
+			stdout.println("(qm) replicate error: " + sourceRNS + ": EndpointIdentifier not found");
+			return (-1);
+		}
+		List<ResolverDescription> resolverList = ResolverUtils.getResolvers(sourceName);
+		if ((resolverList == null) || (resolverList.size() == 0)) {
+			stdout.println("(qm) replication error: " + sourceRNS + ": Resource has no resolver element");
+			return (-1);
+		}
+		TypeInformation type = new TypeInformation(sourceEPR);
+		String serviceName = type.getBestMatchServiceName();
+		if (serviceName == null) {
+			stdout.println("(qm) replicate: " + sourceRNS + ": Type does not support replication");
+			return (-1);
+		}
+		String servicePath = containerPath + '/' + "Services" + '/' + serviceName;
+		RNSPath serviceRNS = current.lookup(servicePath, RNSPathQueryFlags.MUST_EXIST);
+		EndpointReferenceType serviceEPR = serviceRNS.getEndpoint();
+		RNSPath linkRNS = null;
+		if (linkPath != null) {
+			linkRNS = current.lookup(linkPath, RNSPathQueryFlags.MUST_NOT_EXIST);
+		}
+		// Setup existing resource tree before creating new resources.
+		if (type.isRNS()) {
+			Stack<RNSPath> stack = new Stack<RNSPath>();
+			stack.push(sourceRNS);
+			while (stack.size() > 0) {
+				RNSPath currentRNS = stack.pop();
+				addPolicy(currentRNS, stack);
+			}
+		}
+		MessageElement[] elementArr = new MessageElement[2];
+		elementArr[0] = new MessageElement(IResource.ENDPOINT_IDENTIFIER_CONSTRUCTION_PARAM, endpointIdentifier);
+		elementArr[1] = new MessageElement(IResource.PRIMARY_EPR_CONSTRUCTION_PARAM, sourceEPR);
+		GeniiCommon common = ClientUtils.createProxy(GeniiCommon.class, serviceEPR);
+		VcgrCreate request = new VcgrCreate(elementArr);
+		VcgrCreateResponse response = common.vcgrCreate(request);
+		EndpointReferenceType newEPR = response.getEndpoint();
+		if (linkRNS != null) {
+			linkRNS.link(newEPR);
+		}
+		ResourceSecurityPolicy oldSP = new ResourceSecurityPolicy(sourceEPR);
+		ResourceSecurityPolicy newSP = new ResourceSecurityPolicy(newEPR);
+		newSP.copyFrom(oldSP);
+
+		CacheManager.removeItemFromCache(sourceEPR, RNSConstants.ELEMENT_COUNT_QNAME, MessageElement.class);
+		CacheManager.removeItemFromCache(newEPR, RNSConstants.ELEMENT_COUNT_QNAME, MessageElement.class);
+
+		/*
+		 * if (ADD_RESOURCES_TO_ACLS) { // Allow the new resource to modify the old resource, and vice versa, // even if the user did not
+		 * delegate his identity to the resource. newSP.addResource(oldSP); oldSP.addResource(newSP); }
+		 */
+		return 0;
+	}
+
+	// Replicate function based on ReplicateTool.java
+	private void addPolicy(RNSPath currentRNS, Stack<RNSPath> stack) throws RemoteException, RNSException
+	{
+		stdout.println("addPolicy " + currentRNS);
+		GeniiCommon dirService = ClientUtils.createProxy(GeniiCommon.class, currentRNS.getEndpoint());
+		MessageElement[] elementArr = new MessageElement[1];
+		elementArr[0] = new MessageElement(GeniiDirPolicy.REPLICATION_POLICY_QNAME, "true");
+		UpdateResourceProperties request = new UpdateResourceProperties(new UpdateType(elementArr));
+		dirService.updateResourceProperties(request);
+
+		Collection<RNSPath> contents = currentRNS.listContents();
+		for (RNSPath child : contents) {
+			TypeInformation type = new TypeInformation(child.getEndpoint());
+			if (type.isRNS())
+				stack.push(child);
+		}
+	}
+
+	// Resolver function based on ResolverTool.java.
+	// The save as: resolver -p <source-path> <resolver-path>
+	public int resolver_policy(String sourcePath, String targetPath, boolean recursive)
+			throws ReloadShellException, ToolException, UserCancelException,
+			RNSException, AuthZSecurityException, IOException, ResourcePropertyException
+	{
+		RNSPath current = RNSPath.getCurrent();
+		RNSPath sourceRNS = current.lookup(sourcePath, RNSPathQueryFlags.MUST_EXIST);
+
+		RNSPath targetRNS = current.lookup(targetPath, RNSPathQueryFlags.MUST_EXIST);
+		EndpointReferenceType targetEPR = targetRNS.getEndpoint();
+		TypeInformation targetType = new TypeInformation(targetEPR);
+		EndpointReferenceType resolverEPR = null;
+		if (targetType.isEpiResolver()) {
+			resolverEPR = targetEPR;
+		} else if (targetType.isContainer()) {
+			String servicePath = targetPath + "/Services/GeniiResolverPortType";
+			RNSPath serviceRNS = current.lookup(servicePath, RNSPathQueryFlags.MUST_EXIST);
+			EndpointReferenceType serviceEPR = serviceRNS.getEndpoint();
+			MessageElement[] params = new MessageElement[0];
+			GeniiResolverPortType resolverService = ClientUtils.createProxy(GeniiResolverPortType.class, serviceEPR);
+			VcgrCreateResponse response = resolverService.vcgrCreate(new VcgrCreate(params));
+			resolverEPR = response.getEndpoint();
+			stdout.println("(qm) ResolverTool: Created resolver resource");
+		} else {
+			stdout.println("(qm) ResolverTool: Failed to find or create resolver at " + targetPath);
+			return (-1);
+		}
+		Stack<RNSPath> stack = new Stack<RNSPath>();
+		stack.push(sourceRNS);
+		while (stack.size() > 0) {
+			sourceRNS = stack.pop();
+			addResolver(sourceRNS, resolverEPR, stack, recursive);
+		}
+		return 0;
+	}
+
+	// Resolver function based on ResolverTool.java
+	private void addResolver(RNSPath sourceRNS, EndpointReferenceType resolverEPR,
+			Stack<RNSPath> stack, boolean recursive)
+			throws IOException, RNSException
+	{
+		EndpointReferenceType sourceEPR = sourceRNS.getEndpoint();
+		WSName sourceName = new WSName(sourceEPR);
+		if (!sourceName.isValidWSName()) {
+			stdout.println(sourceRNS + ": no EPI");
+			return;
+		}
+		if (sourceName.hasValidResolver()) {
+			stdout.println(sourceRNS + ": already has resolver");
+			return;
+		}
+		UpdateResponseType response = ResolverUtils.updateResolver(resolverEPR, sourceEPR);
+		EndpointReferenceType finalEPR = response.getNew_EPR();
+		TypeInformation type = new TypeInformation(sourceEPR);
+		if (type.isRNS()) {
+			GeniiCommon dirService = ClientUtils.createProxy(GeniiCommon.class, sourceEPR);
+			MessageElement[] elementArr = new MessageElement[1];
+			elementArr[0] = new MessageElement(GeniiDirPolicy.RESOLVER_POLICY_QNAME, resolverEPR);
+			InsertResourceProperties insertReq = new InsertResourceProperties(new InsertType(elementArr));
+			dirService.insertResourceProperties(insertReq);
+		}
+		CacheManager.removeItemFromCache(sourceRNS.pwd(), EndpointReferenceType.class);
+		CacheManager.putItemInCache(sourceRNS.pwd(), finalEPR);
+		if (sourceRNS.isRoot()) {
+			stdout.println("Added resolver to root directory.");
+			/*
+			 * Store the new EPR in the client's calling context, so this client will see a root directory with a resolver element. Using the
+			 * new EPR, the root directory can be replicated, and failover will work. Other existing clients will continue using the old root
+			 * EPR, which still works as the root directory, but it does not support replication or failover.
+			 */
+			RNSPath rootPath = new RNSPath(finalEPR);
+			String pwd = RNSPath.getCurrent().pwd();
+			RNSPath currentPath = rootPath.lookup(pwd, RNSPathQueryFlags.MUST_EXIST);
+			ICallingContext ctxt = ContextManager.getExistingContext();
+			ctxt.setCurrentPath(currentPath);
+			ContextManager.storeCurrentContext(ctxt);
+		} else {
+			sourceRNS.unlink();
+			sourceRNS.link(finalEPR);
+		}
+		if (type.isRNS() && recursive) {
+			Collection<RNSPath> contents = sourceRNS.listContents();
+			for (RNSPath child : contents) {
+				stack.push(child);
+			}
+		}
 	}
 }
