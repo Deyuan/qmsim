@@ -4,11 +4,6 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.ResultSet;
-import java.sql.Statement;
-import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.commons.logging.Log;
@@ -42,8 +37,6 @@ import edu.virginia.vcgr.genii.client.rp.ResourcePropertyException;
 import edu.virginia.vcgr.genii.client.security.axis.AuthZSecurityException;
 import edu.virginia.vcgr.genii.common.GeniiCommon;
 import edu.virginia.vcgr.genii.common.rfactory.VcgrCreate;
-import edu.virginia.vcgr.genii.client.cmd.tools.CopyTool;
-import edu.virginia.vcgr.genii.client.rns.CopyMachine;
 
 public class MkdirTool extends BaseGridTool
 {
@@ -109,7 +102,7 @@ public class MkdirTool extends BaseGridTool
 		EndpointReferenceType service = null;
 		List<String> scheduled_results = null;
 		QosManagerTool qos_manager = QosManagerTool.factory();
-		
+
 		if (specsPath != null) {
 			if (pathsToCreate.size() != 1) {
 				System.out.println("(mkdir) qm: Please create one folder a time with --specs.");
@@ -215,13 +208,13 @@ public class MkdirTool extends BaseGridTool
 			// TODO: when reaching here, the folder is created successfully.
 			// TODO: Tell qos-manager that the folder is created. (maybe
 			//       another table in the db?). This information is for rescheduling.
-			// TODO: Set replicate and resolver.	
+			// TODO: Set replicate and resolver.
 
 			rnsService = scheduled_results.get(0);
-			
+
 			if (scheduled_results.size() == 1) {
 				//no need to replicate
-			} 
+			}
 			if (scheduled_results.size() > 1) {
 				//set replicate
 				//get primary RNSPath
@@ -229,7 +222,7 @@ public class MkdirTool extends BaseGridTool
 				//QosManagerTool.java
 				//Besides, I'm not sure if the sourcePath should be a RnsPath
 				String sourcePath = qos_manager.db_get_container_RnsPath(scheduled_results.get(0));
-				
+
 				GeniiPath gPath = new GeniiPath(rnsService);
 				RNSPath current = RNSPath.getCurrent();
 				RNSPath rns = current.lookup(gPath.path(), RNSPathQueryFlags.MUST_EXIST);
@@ -237,8 +230,8 @@ public class MkdirTool extends BaseGridTool
 					String targetPath = qos_manager.db_get_container_RnsPath(scheduled_results.get(i));
 					CopyTool.copy(sourcePath, targetPath, true, true, rns, stderr);
 				}
-		}			
+			}
+		}
 		return 0;
 	}
-}
 }
