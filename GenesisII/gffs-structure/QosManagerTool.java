@@ -17,6 +17,7 @@ import java.sql.ResultSetMetaData;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Stack;
@@ -760,9 +761,9 @@ public class QosManagerTool extends BaseGridTool
 			stmt.executeUpdate(create_spec_table);
 			stmt.executeUpdate(create_status_table);
 
-			// TODO: we may need to store an integer to indicate which one is
-			// the primary and which one is the resolver
-			String sql = "CREATE TABLE Relationships(SpecId TEXT, ContainerId TEXT, UNIQUE(SpecId, ContainerId) ON CONFLICT REPLACE);";
+			//ReplicaFlag: 1->primary, 0->replicat, -1->none
+			//ResolverFlag: 1->resolver 0->not
+			String sql = "CREATE TABLE Relationships(Directory TEXT, SpecId TEXT, ContainerId TEXT, ReplicaFlag INT, ResoverFlag, UNIQUE(Directory, SpecId, ContainerId) ON CONFLICT REPLACE);";
 			stmt.executeUpdate(sql);
 			stmt.close();
 			conn.close();
@@ -904,9 +905,10 @@ public class QosManagerTool extends BaseGridTool
 
 				System.out.print("  ** RELATIONSHIPS:\t");
 				while (rs_relationship.next()) {
-					String spec_id = rs_relationship.getString(1);
-					String container_id = rs_relationship.getString(2);
-					System.out.print(" " + spec_id + " -> " + container_id + ";");
+					String spec_id = rs_relationship.getString(2);
+					String container_id = rs_relationship.getString(3);
+					String directory = rs_relationship.getString(1);
+					System.out.print(" " + directory + " -> " + spec_id  + " -> " + container_id + ";");
 				}
 				System.out.println("");
 			}
@@ -978,7 +980,7 @@ public class QosManagerTool extends BaseGridTool
 		return false;
 	}
 
-	private boolean db_add_scheduled_spec(QosSpec spec,
+	private boolean db_add_scheduled_spec(QosSpec spec, String mkdir_path,
 			List<String> scheduled_container_ids, boolean init)
 	{
 		Connection conn = null;
@@ -995,14 +997,32 @@ public class QosManagerTool extends BaseGridTool
 
 			if (init) {
 				// Insert new spec
-				System.out.println("(qm) db: Insert scheduled spec: " + spec.SpecId);
+				System.out.println("(qm) db: Insert scheduled spec: " + spec.SpecId + " for directory: " + mkdir_path);
 
 				String sql = "INSERT INTO Specifications VALUES (" + spec_sql_str + ");";
 				stmt.executeUpdate(sql);
-
-				for (int i = 0; i < scheduled_container_ids.size(); i++) {
-					sql = "INSERT INTO Relationships VALUES ('" + spec.SpecId + "','"
-							+ scheduled_container_ids.get(i) + "');";
+				if (scheduled_container_ids.size()==1) {
+					sql = "INSERT INTO Relationships VALUES ('" + mkdir_path + "','" + spec.SpecId + "','"
+							+ scheduled_container_ids.get(0) + "'," + 1 + "," + 0 + ");";
+					stmt.executeUpdate(sql);
+				}
+				else{
+					for (int i = 0; i < scheduled_container_ids.size(); i++) {
+						if (i==0) {
+							sql = "INSERT INTO Relationships VALUES ('" + mkdir_path + "','" + spec.SpecId + "','"
+									+ scheduled_container_ids.get(0) + "'," + 1 + "," + 0 + ");";
+							stmt.executeUpdate(sql);
+						}
+						if (i==1) {
+							sql = "INSERT INTO Relationships VALUES ('" + mkdir_path + "','" + spec.SpecId + "','"
+									+ scheduled_container_ids.get(1) + "'," + 0 + "," + 1 + ");";
+							stmt.executeUpdate(sql);
+						}
+						else {
+							sql = "INSERT INTO Relationships VALUES ('" + mkdir_path + "','" + spec.SpecId + "','"
+									+ scheduled_container_ids.get(1) + "'," + 0 + "," + 0 + ");";
+							stmt.executeUpdate(sql);
+						}
 					String con_storagereserved = "SELECT StorageReserved FROM Containers WHERE ContainerId = '"
 							+ scheduled_container_ids.get(i) + "';";
 					ResultSet con_reserved = stmt.executeQuery(con_storagereserved);
@@ -1010,8 +1030,8 @@ public class QosManagerTool extends BaseGridTool
 
 					String sql_update_rstorage = "UPDATE Containers SET StorageReserved = " + container_storagereserved
 							+ " where ContainerID = '" + scheduled_container_ids.get(i) + "';";
-					stmt.executeUpdate(sql);
 					stmt.executeUpdate(sql_update_rstorage);
+					}
 				}
 			} else {
 				// Update existing spec
@@ -1025,13 +1045,24 @@ public class QosManagerTool extends BaseGridTool
 				ResultSet old_reserved = stmt.executeQuery(old_spec);
 				int old_spec_reserved = old_reserved.getInt(1);
 
-				String sql = "DELETE FROM Relationships WHERE SpecId = '" + spec.SpecId + "';";
-				stmt.executeUpdate(sql);
-
-				sql = "DELETE FROM Specifications WHERE SpecId = '" + spec.SpecId + "';";
+				String sql = "DELETE FROM Specifications WHERE SpecId = '" + spec.SpecId + "';";
 				stmt.executeUpdate(sql);
 
 				sql = "INSERT INTO Specifications VALUES (" + spec_sql_str + ");";
+				stmt.executeUpdate(sql);
+
+				//get all affected directory and reschedule for these directory
+				List<String> directory_list = new ArrayList<String>();
+				String sql_directorylist = "SELECT Directory FROM Relationships WHERE SpecId = '" + spec.SpecId + "';";
+				ResultSet rs = stmt.executeQuery(sql_directorylist);
+				//there are duplicated results here
+				while (rs.next()) {
+					//System.out.println(rs.getString(1));
+					directory_list.add(rs.getString(1));
+				}
+				directory_list = new ArrayList<String>(new LinkedHashSet<String>(directory_list));
+
+				sql = "DELETE FROM Relationships WHERE SpecId = '" + spec.SpecId + "';";
 				stmt.executeUpdate(sql);
 
 				for (int i = 0; i < scheduled_container_ids.size(); i++) {
@@ -1047,10 +1078,32 @@ public class QosManagerTool extends BaseGridTool
 								+ " where ContainerID = '" + scheduled_container_ids.get(i) + "';";
 						stmt.executeUpdate(sql_update_rstorage);
 
-						sql = "INSERT INTO Relationships VALUES ('" + spec.SpecId + "','"
-								+ scheduled_container_ids.get(i) + "');";
-						stmt.executeUpdate(sql);
+						if (scheduled_container_ids.size()==1) {
+							sql = "INSERT INTO Relationships VALUES ('" + mkdir_path + "','" + spec.SpecId + "','"
+									+ scheduled_container_ids.get(0) + "'," + 1 + "," + 0 + ");";
+							stmt.executeUpdate(sql);
+						}
+						else{
+							for (int j = 0; j < scheduled_container_ids.size(); j++) {
+								if (j==0) {
+									sql = "INSERT INTO Relationships VALUES ('" + mkdir_path + "','" + spec.SpecId + "','"
+											+ scheduled_container_ids.get(0) + "'," + 1 + "," + 0 + ");";
+									stmt.executeUpdate(sql);
+								}
+								if (j==1) {
+									sql = "INSERT INTO Relationships VALUES ('" + mkdir_path + "','" + spec.SpecId + "','"
+											+ scheduled_container_ids.get(1) + "'," + 0 + "," + 1 + ");";
+									stmt.executeUpdate(sql);
+								}
+								else {
+									sql = "INSERT INTO Relationships VALUES ('" + mkdir_path + "','" + spec.SpecId + "','"
+											+ scheduled_container_ids.get(1) + "'," + 0 + "," + 0 + ");";
+									stmt.executeUpdate(sql);
+								}
+							}
+						}
 					} else {
+						System.out.println("$$$$$$$$$$$$$$$$$$$$$$$");
 						// a container only in new: create and file copy
 						String con_storagereserved = "SELECT StorageReserved FROM Containers WHERE ContainerId = '"
 								+ scheduled_container_ids.get(i) + "';";
@@ -1061,9 +1114,30 @@ public class QosManagerTool extends BaseGridTool
 								+ " where ContainerID = '" + scheduled_container_ids.get(i) + "';";
 						stmt.executeUpdate(sql_update_rstorage);
 
-						sql = "INSERT INTO Relationships VALUES ('" + spec.SpecId + "','"
-								+ scheduled_container_ids.get(i) + "');";
-						stmt.executeUpdate(sql);
+						if (scheduled_container_ids.size()==1) {
+							sql = "INSERT INTO Relationships VALUES ('" + mkdir_path + "','" + spec.SpecId + "','"
+									+ scheduled_container_ids.get(0) + "'," + 1 + "," + 0 + ");";
+							stmt.executeUpdate(sql);
+						}
+						else{
+							for (int j = 0; j < scheduled_container_ids.size(); j++) {
+								if (j==0) {
+									sql = "INSERT INTO Relationships VALUES ('" + mkdir_path + "','" + spec.SpecId + "','"
+											+ scheduled_container_ids.get(0) + "'," + 1 + "," + 0 + ");";
+									stmt.executeUpdate(sql);
+								}
+								if (j==1) {
+									sql = "INSERT INTO Relationships VALUES ('" + mkdir_path + "','" + spec.SpecId + "','"
+											+ scheduled_container_ids.get(1) + "'," + 0 + "," + 1 + ");";
+									stmt.executeUpdate(sql);
+								}
+								else {
+									sql = "INSERT INTO Relationships VALUES ('" + mkdir_path + "','" + spec.SpecId + "','"
+											+ scheduled_container_ids.get(1) + "'," + 0 + "," + 0 + ");";
+									stmt.executeUpdate(sql);
+								}
+							}
+						}
 						System.out.println("(qm) db : File copy for specification " + spec.SpecId + " to " + scheduled_container_ids.get(i));
 					}
 				}
@@ -1201,6 +1275,8 @@ public class QosManagerTool extends BaseGridTool
 			System.out.println(e.getClass().getName() + ": " + e.getMessage());
 			System.exit(-1);
 		}
+
+		container_ids = new ArrayList<String>(new LinkedHashSet<String>(container_ids));
 		return container_ids;
 	}
 
@@ -1227,6 +1303,7 @@ public class QosManagerTool extends BaseGridTool
 			System.out.println(e.getClass().getName() + ": " + e.getMessage());
 			System.exit(-1);
 		}
+		spec_ids = new ArrayList<String>(new LinkedHashSet<String>(spec_ids));
 		return spec_ids;
 	}
 
@@ -1366,7 +1443,7 @@ public class QosManagerTool extends BaseGridTool
 		spec.ReservedSize = 10;
 		List<String> container_list = new ArrayList<String>();
 		container_list.add("container1");
-		db_add_scheduled_spec(spec, container_list, true);
+		db_add_scheduled_spec(spec, "bck", container_list, true);
 		db_summary(true);
 
 		System.out.println("#### DB Test 5: Update a scheduled spec");
@@ -1375,7 +1452,7 @@ public class QosManagerTool extends BaseGridTool
 		container_list.clear();
 		container_list.add("container1");
 		container_list.add("container2");
-		db_add_scheduled_spec(spec, container_list, false);
+		db_add_scheduled_spec(spec, "bck", container_list, false);
 		db_summary(true);
 
 		System.out.println("#### DB Test 6: Update a scheduled spec");
@@ -1383,7 +1460,7 @@ public class QosManagerTool extends BaseGridTool
 		spec.ReservedSize = 30;
 		container_list.clear();
 		container_list.add("container2");
-		db_add_scheduled_spec(spec, container_list, false);
+		db_add_scheduled_spec(spec, "bck",container_list, false);
 		db_summary(true);
 
 		System.out.println("#### DB Test 7: Remove a spec");
@@ -1395,7 +1472,7 @@ public class QosManagerTool extends BaseGridTool
 		container_list.clear();
 		container_list.add("container1");
 		container_list.add("container2");
-		db_add_scheduled_spec(spec, container_list, true);
+		db_add_scheduled_spec(spec, "bck",container_list, true);
 		db_summary(false);
 		db_summary(true);
 
@@ -1753,6 +1830,7 @@ public class QosManagerTool extends BaseGridTool
 		if (!satisfied) {
 			// reschedule
 			List<String> rescheduled = schedule(null, spec_id);
+			//directory to make is needed here as second parameter
 			db_add_scheduled_spec(spec, rescheduled, false); //update
 		}
 		return true;
