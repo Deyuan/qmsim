@@ -209,9 +209,7 @@ public class MkdirTool extends BaseGridTool
 		if (specsPath != null) {
 			int err = 0;
 			System.out.println("(mkdir) qm: Post-processing.");
-			// Note: the target foler is created successfully.
-			// TODO: Tell qos-manager that the folder is created. (maybe
-			//       another table in the db?). This information is for rescheduling.
+			// Note: the target folder is created successfully.
 
 			if (scheduled_results.size() > 1) {
 				try {
@@ -238,8 +236,13 @@ public class MkdirTool extends BaseGridTool
 				}
 			}
 			if (err == 0) {
-				qos_manager.commit_scheduling_results(specsPath, pathsToCreate.get(0), scheduled_results);
-				System.out.println("(mkdir) qm: Successfully create dynamically scheduled folder: " +  pathsToCreate.get(0));
+				boolean succ = qos_manager.commit_scheduling_results(specsPath, pathsToCreate.get(0), scheduled_results);
+				if (succ) {
+					System.out.println("(mkdir) qm: Successfully create dynamically scheduled folder: " +  pathsToCreate.get(0));
+				} else {
+					System.out.println("(mkdir) qm: Fail to create folder: " +  pathsToCreate.get(0));
+					// TODO: remove replicates, remove folder
+				}
 			}
 		}
 		return 0;
