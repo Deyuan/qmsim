@@ -1687,6 +1687,14 @@ public class QosManagerTool extends BaseGridTool
 		return scheduled_containers;
 	}
 
+	// Wrapper for committing the scheduling results to the QoS database.
+	public boolean commit_scheduling_results(String spec_path, String mkdir_path,
+			List<String> scheduled_rns)
+	{
+		System.out.println("(qm) scheduler: Commit scheduling results. NYI.");
+		// TODO: add scheduling results to DB.
+		return false;
+	}
 	/**************************************************************************
 	 *  QoS Monitors
 	 **************************************************************************/
