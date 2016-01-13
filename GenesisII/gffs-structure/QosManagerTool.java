@@ -17,9 +17,11 @@ import java.sql.ResultSetMetaData;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.Stack;
 
 import org.apache.axis.message.MessageElement;
@@ -185,6 +187,11 @@ public class QosManagerTool extends BaseGridTool
 	/**************************************************************************
 	 *  QoS Specifications
 	 **************************************************************************/
+
+	/**
+	 * A class for representing the QoS specifications, including some file
+	 * I/O and SQL utilities.
+	 */
 	private class QosSpec
 	{
 		public String SpecId = "";            // (str) a unique string
@@ -289,20 +296,20 @@ public class QosManagerTool extends BaseGridTool
 				if (spec_str != "") {
 					boolean succ = this.parse_string(spec_str);
 					if (succ) {
-						System.out.println("(qm) Get QoS specs from " + spec_path);
+						System.out.println("(qm) Read QoS specs from " + spec_path);
 						this.SpecPath = "grid:" + path.lookupRNS();
 						return true;
 					}
 				}
 			} catch (Exception e) {
-				System.out.println(e.toString());
+				System.out.println(e.getClass().getName() + ": " + e.getMessage());
 				spec_str = "";
 			} finally {
 				StreamUtils.close(reader);
 				StreamUtils.close(in);
 			}
 
-			System.out.println("(qm) Fail to get QoS specs from " + spec_path);
+			System.out.println("(qm) Fail to read QoS specs from " + spec_path);
 			return false;
 		}
 
@@ -342,6 +349,11 @@ public class QosManagerTool extends BaseGridTool
 	/**************************************************************************
 	 *  Container Status
 	 **************************************************************************/
+
+	/**
+	 * A class for representing the status of a container, including some file
+	 * I/O and SQL utilities.
+	 */
 	private class ContainerStatus
 	{
 		public String ContainerId = "";       // (str) a unique string
@@ -489,7 +501,7 @@ public class QosManagerTool extends BaseGridTool
 				if (status_str != "") {
 					boolean succ = this.parse_string(status_str);
 					if (succ) {
-						System.out.println("(qm) Get container status from " + status_path);
+						System.out.println("(qm) Read container status from " + status_path);
 						this.StatusPath = "grid:" + path.lookupRNS();
 						GeniiPath rns = new GeniiPath(this.RnsPath);
 						this.RnsPath = "grid:" + rns.lookupRNS();
@@ -497,14 +509,14 @@ public class QosManagerTool extends BaseGridTool
 					}
 				}
 			} catch (Exception e) {
-				System.out.println(e.toString());
+				System.out.println(e.getClass().getName() + ": " + e.getMessage());
 				status_str = "";
 			} finally {
 				StreamUtils.close(reader);
 				StreamUtils.close(in);
 			}
 
-			System.out.println("(qm) Fail to get container status from " + status_path);
+			System.out.println("(qm) Fail to read container status from " + status_path);
 			return false;
 		}
 
@@ -559,6 +571,12 @@ public class QosManagerTool extends BaseGridTool
 	/**************************************************************************
 	 *  QoS Manager Entry
 	 **************************************************************************/
+
+	/**
+	 * The main entry of the qos-manager. Options are handled here.
+	 * @param arg
+	 * @throws IOException
+	 */
 	public void qos_manager(String arg) throws IOException
 	{
 		boolean succ;
@@ -567,7 +585,7 @@ public class QosManagerTool extends BaseGridTool
 					+ _spec_id_to_schedule);
 			succ = db_sync_down();
 			if (succ) {
-				schedule(null, _spec_id_to_schedule);
+				schedule_internal(null, _spec_id_to_schedule);
 				db_sync_up();
 			}
 		} else if (_spec_id_to_remove != null) {
@@ -587,8 +605,14 @@ public class QosManagerTool extends BaseGridTool
 				if (is_rns_valid(status.RnsPath) && is_rns_available(status.RnsPath)) {
 					succ = db_sync_down();
 					if (succ) {
-						db_update_container(status, true); // init
-						monitor_specs_on_container(status.ContainerId);
+						ContainerStatus status_db = db_get_status(status.ContainerId);
+						if (status_db == null) {
+							db_update_container(status, true); // init
+						} else {
+							db_update_container(status, false); // init
+						}
+						// TODO: need to monitor?
+						//monitor_specs_on_container(status.ContainerId);
 						db_sync_up();
 					}
 				} else {
@@ -601,8 +625,19 @@ public class QosManagerTool extends BaseGridTool
 					+ _container_id_to_remove);
 			succ = db_sync_down();
 			if (succ) {
-				db_remove_container(_container_id_to_remove);
-				db_sync_up();
+				ContainerStatus status = db_get_status(_container_id_to_remove);
+				if (status != null) {
+					// Set availability to 0
+					status.ContainerAvailability = 0;
+					db_update_container(status, false);
+					// Reschedule
+					succ = monitor_specs_on_container(_container_id_to_remove);
+					if (succ) {
+						// Remove container
+						db_remove_container(_container_id_to_remove);
+						db_sync_up();
+					}
+				}
 			}
 		} else if (_show_db) {
 			System.out.println("(qm) main: Show information of the QoS database.");
@@ -658,6 +693,11 @@ public class QosManagerTool extends BaseGridTool
 	/**************************************************************************
 	 *  QoS Database Interfaces
 	 **************************************************************************/
+
+	/**
+	 * QoS DB: Get the path of the qos.db file in grid home directory.
+	 * @return
+	 */
 	private String db_get_grid_path() {
 		if (this._gridHomeDir == null) {
 			Map<String, String> env = GridUserEnvironment.getGridUserEnvironment();
@@ -670,6 +710,10 @@ public class QosManagerTool extends BaseGridTool
 		return this._gridHomeDir + "/" + this._qosDbName;
 	}
 
+	/**
+	 * QoS DB: Get the path of the qos.db file in user local directory.
+	 * @return
+	 */
 	private String db_get_local_path() {
 		if (this._localUserDir == null) {
 			this._localUserDir = InstallationProperties.getUserDir();
@@ -681,6 +725,10 @@ public class QosManagerTool extends BaseGridTool
 		return this._localUserDir + "/" + this._qosDbName;
 	}
 
+	/**
+	 * QoS DB: Synchronize the qos.db in grid home directory to local.
+	 * @return
+	 */
 	private boolean db_sync_down() {
 		String db_grid_path = db_get_grid_path();
 		String db_local_path = db_get_local_path();
@@ -703,6 +751,10 @@ public class QosManagerTool extends BaseGridTool
 		}
 	}
 
+	/**
+	 * QoS DB: Synchronize the local qos.db to grid home directory.
+	 * @return
+	 */
 	private boolean db_sync_up() {
 		String db_grid_path = db_get_grid_path();
 		String db_local_path = db_get_local_path();
@@ -725,6 +777,10 @@ public class QosManagerTool extends BaseGridTool
 		}
 	}
 
+	/**
+	 * QoS DB: Destroy the local qos.db file.
+	 * @return
+	 */
 	private boolean db_destroy() {
 		String db_grid_path = db_get_grid_path();
 		String db_local_path = db_get_local_path();
@@ -742,6 +798,11 @@ public class QosManagerTool extends BaseGridTool
 		return true;
 	}
 
+	/**
+	 * QoS DB: Initialize the DB. If the qos.db file already exists in user
+	 * home directory, this file should be removed manually.
+	 * @return
+	 */
 	private boolean db_init() {
 		db_destroy();
 
@@ -774,6 +835,10 @@ public class QosManagerTool extends BaseGridTool
 		return false;
 	}
 
+	/**
+	 * QoS DB: Print out summary of the DB.
+	 * @param verbose
+	 */
 	private void db_summary(boolean verbose) {
 		Connection conn = null;
 		Statement stmt = null;
@@ -931,7 +996,14 @@ public class QosManagerTool extends BaseGridTool
 		}
 	}
 
+	/**
+	 * QoS DB: Update the status of a container in DB.
+	 * @param status
+	 * @param init
+	 * @return
+	 */
 	private boolean db_update_container(ContainerStatus status, boolean init) {
+		assert (status != null);
 		Connection conn = null;
 		Statement stmt = null;
 		try {
@@ -939,66 +1011,63 @@ public class QosManagerTool extends BaseGridTool
 			conn = DriverManager.getConnection("jdbc:sqlite:" + db_get_local_path());
 			stmt = conn.createStatement();
 
-			assert (status != null);
+			String sql = "SELECT * FROM Containers WHERE ContainerId = '" + status.ContainerId + "';";
+			ResultSet rs = stmt.executeQuery(sql);
 
-			if (init) {
-				String sql = "SELECT * FROM Containers WHERE ContainerId = '" + status.ContainerId + "';";
-				ResultSet rs = stmt.executeQuery(sql);
+			if (rs.next()) { // exist
+				if (init) { // error
+					System.out.println("(qm) db: Error: Container: " + status.ContainerId + " already exists.");
+					return false;
+				} else { // update
+					System.out.println("(qm) db: Update status of container: " + status.ContainerId);
 
-				if (rs.next()) {
-					//container already exists
-					System.out.println("(qm) db: Container: " + status.ContainerId + " already exists.");
-					System.out.println("(qm) db: Update status for " + status.ContainerId);
-					String sql_storagereserved = "SELECT StorageReserved FROM Containers WHERE ContainerId = '" + status.ContainerId + "';";
-					ResultSet rs_reserved = stmt.executeQuery(sql_storagereserved);
+					// Maintain the reserved size
+					sql = "SELECT StorageReserved FROM Containers WHERE ContainerId = '" + status.ContainerId + "';";
+					ResultSet rs_reserved = stmt.executeQuery(sql);
 					status.StorageReserved = rs_reserved.getInt(1);
 
-					String sql_delete = "DELETE FROM Containers WHERE ContainerId = '" + status.ContainerId + "';";
-					stmt.executeUpdate(sql_delete);
-					String status_sql_str = status.to_sql_string();
-					sql = "INSERT INTO Containers VALUES (" + status_sql_str + ");";
+					sql = "DELETE FROM Containers WHERE ContainerId = '" + status.ContainerId + "';";
 					stmt.executeUpdate(sql);
-				} else {
-					// Insert new container
-					System.out.println("(qm) db: Insert status of new container: " + status.ContainerId);
-					String status_sql_str = status.to_sql_string();
-					String sql_insert = "INSERT INTO Containers VALUES (" + status_sql_str + ");";
-					stmt.executeUpdate(sql_insert);
+					sql = "INSERT INTO Containers VALUES (" + status.to_sql_string() + ");";
+					stmt.executeUpdate(sql);
 				}
-			} else {
-				// Update existing container
-				System.out.println("(qm) db: Update status of container: " + status.ContainerId);
-
-				String sql_storagereserved = "SELECT StorageReserved FROM Containers WHERE ContainerId = '" + status.ContainerId + "';";
-				ResultSet rs_reserved = stmt.executeQuery(sql_storagereserved);
-				status.StorageReserved = rs_reserved.getInt(1);
-
-				String sql = "DELETE FROM Containers WHERE ContainerId = '" + status.ContainerId + "';";
-				stmt.executeUpdate(sql);
-				String status_sql_str = status.to_sql_string();
-				sql = "INSERT INTO Containers VALUES (" + status_sql_str + ");";
-				stmt.executeUpdate(sql);
+			} else { // not exist
+				if (init) { // insert
+					System.out.println("(qm) db: Insert status of new container: " + status.ContainerId);
+					sql = "INSERT INTO Containers VALUES (" + status.to_sql_string() + ");";
+					stmt.executeUpdate(sql);
+				} else { // error
+					System.out.println("(qm) db: Error: Cannot update a not exist container.");
+					return false;
+				}
 			}
 			stmt.close();
 			conn.close();
-			return true;
 		} catch (Exception e) {
 			System.out.println(e.getClass().getName() + ": " + e.getMessage());
-			System.exit(-1);
+			return false;
 		}
-		return false;
+		return true;
 	}
 
-	private boolean db_add_scheduled_spec(QosSpec spec, String mkdir_path,
+	/**
+	 * QoS DB: Add a scheduled directory into the DB.
+	 * @param mkdir_path
+	 * @param spec
+	 * @param scheduled_container_ids
+	 * @param init
+	 * @return
+	 */
+	private boolean db_add_scheduled_directory(String mkdir_path, QosSpec spec,
 			List<String> scheduled_container_ids, boolean init)
 	{
+		assert(mkdir_path != null && spec != null);
+		assert(scheduled_container_ids != null && scheduled_container_ids.size() > 0);
 		Connection conn = null;
 		Statement stmt = null;
 
-		assert(spec != null);
-		String spec_sql_str = spec.to_sql_string();
-
 		// TODO: file copy
+		// TODO: need to rewrite
 		try {
 			Class.forName("org.sqlite.JDBC");
 			conn = DriverManager.getConnection("jdbc:sqlite:" + db_get_local_path());
@@ -1008,7 +1077,7 @@ public class QosManagerTool extends BaseGridTool
 				// Insert new spec
 				System.out.println("(qm) db: Insert scheduled spec: " + spec.SpecId + " for directory: " + mkdir_path);
 
-				String sql = "INSERT INTO Specifications VALUES (" + spec_sql_str + ");";
+				String sql = "INSERT INTO Specifications VALUES (" + spec.to_sql_string() + ");";
 				stmt.executeUpdate(sql);
 				if (scheduled_container_ids.size() == 1) {
 					sql = "INSERT INTO Relationships VALUES ('" + mkdir_path + "','" + spec.SpecId + "','"
@@ -1052,7 +1121,7 @@ public class QosManagerTool extends BaseGridTool
 				String sql = "DELETE FROM Specifications WHERE SpecId = '" + spec.SpecId + "';";
 				stmt.executeUpdate(sql);
 
-				sql = "INSERT INTO Specifications VALUES (" + spec_sql_str + ");";
+				sql = "INSERT INTO Specifications VALUES (" + spec.to_sql_string() + ");";
 				stmt.executeUpdate(sql);
 
 				//get all affected directory and reschedule for these directory
@@ -1151,17 +1220,23 @@ public class QosManagerTool extends BaseGridTool
 			}
 			stmt.close();
 			conn.close();
-			return true;
 		} catch (Exception e) {
 			System.out.println(e.getClass().getName() + ": " + e.getMessage());
-			System.exit(-1);
+			return false;
 		}
-		return false;
+		return true;
 	}
 
+	/**
+	 * QoS DB: Remove a specification from the DB.
+	 * All relationships related to this spec will be deleted. But the actual
+	 * directories will not be deleted.
+	 * @param spec_id
+	 * @return
+	 */
 	private boolean db_remove_spec(String spec_id) {
+		assert(spec_id != null);
 		System.out.println("(qm) db: Remove specification: " + spec_id);
-
 		Connection conn = null;
 		Statement stmt = null;
 
@@ -1176,20 +1251,16 @@ public class QosManagerTool extends BaseGridTool
 			if (rs.next()) {
 				int spec_reserved = rs.getInt(1);
 				sql = "SELECT ContainerId FROM Relationships WHERE SpecId = '" + spec_id + "';";
-				ResultSet rs_container = stmt.executeQuery(sql);
+				ResultSet rs_rel = stmt.executeQuery(sql);
 
-				List<String> container_list = new ArrayList<String>();
-				while (rs_container.next()) {
-					container_list.add(rs_container.getString(1));
-				}
-
-				for (int i = 0; i < container_list.size(); i++) {
-					sql = "SELECT StorageReserved FROM Containers WHERE ContainerId = '" + container_list.get(i) + "';";
+				while (rs_rel.next()) {
+					String container_id = rs_rel.getString(1);
+					sql = "SELECT StorageReserved FROM Containers WHERE ContainerId = '" + container_id + "';";
 					ResultSet rs_reserved = stmt.executeQuery(sql);
 					int storage_reserved = rs_reserved.getInt(1);
 					storage_reserved -= spec_reserved;
 					sql = "UPDATE Containers SET StorageReserved = " + storage_reserved
-							+ " WHERE ContainerId =" + "'" + container_list.get(i) +"';";
+							+ " WHERE ContainerId =" + "'" + container_id +"';";
 					stmt.executeUpdate(sql);
 				}
 
@@ -1200,17 +1271,22 @@ public class QosManagerTool extends BaseGridTool
 			}
 			stmt.close();
 			conn.close();
-			return true;
 		} catch (Exception e) {
 			System.out.println(e.getClass().getName() + ": " + e.getMessage());
-			System.exit(-1);
+			return false;
 		}
-		return false;
+		return true;
 	}
 
+	/**
+	 * QoS DB: Remove a container from the DB. There should be no directories
+	 * scheduled on this container.
+	 * @param container_id
+	 * @return
+	 */
 	private boolean db_remove_container(String container_id) {
+		assert(container_id != null);
 		System.out.println("(qm) db: Remove container: " + container_id);
-
 		Connection conn = null;
 		Statement stmt = null;
 
@@ -1224,33 +1300,36 @@ public class QosManagerTool extends BaseGridTool
 
 			if (rs.next()) {
 				sql = "SELECT * FROM Relationships WHERE ContainerId = '" + container_id + "';";
-				ResultSet rs_specs = stmt.executeQuery(sql);
+				ResultSet rs_rel = stmt.executeQuery(sql);
 
-				if (rs_specs.next()) {
-					System.out.println("(qm) db: ERROR: specifications on container are not rescheduled.");
+				if (rs_rel.next()) {
+					System.out.println("(qm) db: ERROR: Specifications on container are not rescheduled.");
 					return false;
 				}
 
 				sql = "DELETE FROM Containers WHERE ContainerId = '" + container_id + "';";
 				stmt.executeUpdate(sql);
-			}
-			else {
+			} else {
 				System.out.println("(qm) db: " + container_id + " does not exist in db.");
 			}
 			stmt.close();
 			conn.close();
-			return true;
 		} catch (Exception e) {
 			System.out.println(e.getClass().getName() + ": " + e.getMessage());
-			System.exit(-1);
+			return false;
 		}
-		return false;
+		return true;
 	}
 
+	/**
+	 * QoS DB: Given a specification, get all related container IDs.
+	 * @param spec_id
+	 * @return
+	 */
 	private List<String> db_get_container_ids_for_spec(String spec_id) {
+		assert(spec_id != null);
 		System.out.println("(qm) db: Get container ids for specification: " + spec_id);
-		List<String> container_ids = new ArrayList<String>();
-
+		Set<String> container_ids = new HashSet<String>();
 		Connection conn = null;
 		Statement stmt = null;
 
@@ -1268,17 +1347,20 @@ public class QosManagerTool extends BaseGridTool
 			conn.close();
 		} catch (Exception e) {
 			System.out.println(e.getClass().getName() + ": " + e.getMessage());
-			System.exit(-1);
+			container_ids.clear();
 		}
-
-		container_ids = new ArrayList<String>(new LinkedHashSet<String>(container_ids));
-		return container_ids;
+		return new ArrayList<String>(container_ids);
 	}
 
+	/**
+	 * QoS DB: Given a container, get all related specs IDs.
+	 * @param container_id
+	 * @return
+	 */
 	private List<String> db_get_spec_ids_on_container(String container_id) {
+		assert(container_id != null);
 		System.out.println("(qm) db: Get spec ids on container: " + container_id);
-		List<String> spec_ids = new ArrayList<String>();
-
+		Set<String> spec_ids = new HashSet<String>();
 		Connection conn = null;
 		Statement stmt = null;
 
@@ -1296,16 +1378,18 @@ public class QosManagerTool extends BaseGridTool
 			conn.close();
 		} catch (Exception e) {
 			System.out.println(e.getClass().getName() + ": " + e.getMessage());
-			System.exit(-1);
+			spec_ids.clear();
 		}
-		spec_ids = new ArrayList<String>(new LinkedHashSet<String>(spec_ids));
-		return spec_ids;
+		return new ArrayList<String>(spec_ids);
 	}
 
+	/**
+	 * QoS DB: Get the list of IDs of all containers.
+	 * @return
+	 */
 	private List<String> db_get_container_id_list() {
 		System.out.println("(qm) db: Get container id list. ");
 		List<String> container_ids = new ArrayList<String>();
-
 		Connection conn = null;
 		Statement stmt = null;
 
@@ -1323,15 +1407,18 @@ public class QosManagerTool extends BaseGridTool
 			conn.close();
 		} catch (Exception e) {
 			System.out.println(e.getClass().getName() + ": " + e.getMessage());
-			System.exit(-1);
+			container_ids.clear();
 		}
 		return container_ids;
 	}
 
+	/**
+	 * QoS DB: Get the list of IDs of all specs.
+	 * @return
+	 */
 	private List<String> db_get_spec_id_list() {
 		System.out.println("(qm) db: Get specification id list. ");
 		List<String> spec_ids = new ArrayList<String>();
-
 		Connection conn = null;
 		Statement stmt = null;
 
@@ -1349,15 +1436,19 @@ public class QosManagerTool extends BaseGridTool
 			conn.close();
 		} catch (Exception e) {
 			System.out.println(e.getClass().getName() + ": " + e.getMessage());
-			System.exit(-1);
+			spec_ids.clear();
 		}
 		return spec_ids;
 	}
 
+	/**
+	 * QoS DB: Given a container ID, get its status in DB.
+	 * @param container_id
+	 * @return
+	 */
 	private ContainerStatus db_get_status(String container_id) {
-		System.out.println("(qm) db: Get container stautus for: " + container_id);
+		assert(container_id != null);
 		ContainerStatus status = null;
-
 		Connection conn = null;
 		Statement stmt = null;
 
@@ -1375,15 +1466,21 @@ public class QosManagerTool extends BaseGridTool
 			conn.close();
 		} catch (Exception e) {
 			System.out.println(e.getClass().getName() + ": " + e.getMessage());
-			System.exit(-1);
+			status = null;
 		}
+		System.out.println("(qm) db: Get container stautus of " + container_id
+				+ " [" + (status == null ? "null" : "successful") + "]");
 		return status;
 	}
 
+	/**
+	 * QoS DB: Given a spec ID, get its spec in DB.
+	 * @param spec_id
+	 * @return
+	 */
 	private QosSpec db_get_spec(String spec_id) {
-		System.out.println("(qm) db: Get specification contents for: " + spec_id);
+		assert(spec_id != null);
 		QosSpec spec = null;
-
 		Connection conn = null;
 		Statement stmt = null;
 
@@ -1401,15 +1498,21 @@ public class QosManagerTool extends BaseGridTool
 			conn.close();
 		} catch (Exception e) {
 			System.out.println(e.getClass().getName() + ": " + e.getMessage());
-			System.exit(-1);
+			spec = null;
 		}
+		System.out.println("(qm) db: Get specification contents of " + spec_id
+				+ " [" + (spec == null ? "null" : "successful") + "]");
 		return spec;
 	}
 
+	/**
+	 * QoS DB: Given a container RNS path, get its container ID.
+	 * @param container_rns
+	 * @return
+	 */
 	private String db_get_container_id_from_rns(String container_rns) {
-		System.out.println("(qm) db: Get container id for RNS: " + container_rns);
+		assert(container_rns != null);
 		String container_id = null;
-
 		Connection conn = null;
 		Statement stmt = null;
 
@@ -1418,7 +1521,8 @@ public class QosManagerTool extends BaseGridTool
 			conn = DriverManager.getConnection("jdbc:sqlite:" + db_get_local_path());
 			stmt = conn.createStatement();
 
-			String sql = "SELECT ContainerId FROM Containers WHERE RnsPath = '" + container_rns + "';";
+			GeniiPath path = new GeniiPath(container_rns);
+			String sql = "SELECT ContainerId FROM Containers WHERE RnsPath = 'grid:" + path.lookupRNS() + "';";
 			ResultSet rs = stmt.executeQuery(sql);
 			if (rs.next()) {
 				container_id = rs.getString(1);
@@ -1427,11 +1531,16 @@ public class QosManagerTool extends BaseGridTool
 			conn.close();
 		} catch (Exception e) {
 			System.out.println(e.getClass().getName() + ": " + e.getMessage());
-			System.exit(-1);
+			container_id = null;
 		}
+		System.out.println("(qm) db: Get container id for RNS: " + container_rns
+				+ " [" + container_id + "]");
 		return container_id;
 	}
 
+	/**
+	 * QoS DB: Internal function for testing the QoS DB.
+	 */
 	private void test_db() {
 		System.out.println("#### DB Test 0: Show empty QoS database");
 		db_init();
@@ -1455,7 +1564,7 @@ public class QosManagerTool extends BaseGridTool
 		status.ContainerId = "container1";
 		status.RnsPath = "//ccc";
 		status.StorageTotal = 1000;
-		db_update_container(status, true);
+		db_update_container(status, false);
 		db_summary(true);
 
 		System.out.println("#### DB Test 4: Add a scheduled spec");
@@ -1464,7 +1573,7 @@ public class QosManagerTool extends BaseGridTool
 		spec.ReservedSize = 10;
 		List<String> container_list = new ArrayList<String>();
 		container_list.add("container1");
-		db_add_scheduled_spec(spec, "bck", container_list, true);
+		db_add_scheduled_directory("bck", spec, container_list, true);
 		db_summary(true);
 
 		System.out.println("#### DB Test 5: Update a scheduled spec");
@@ -1473,7 +1582,7 @@ public class QosManagerTool extends BaseGridTool
 		container_list.clear();
 		container_list.add("container1");
 		container_list.add("container2");
-		db_add_scheduled_spec(spec, "bck", container_list, false);
+		db_add_scheduled_directory("bck", spec, container_list, false);
 		db_summary(true);
 
 		System.out.println("#### DB Test 6: Update a scheduled spec");
@@ -1481,7 +1590,7 @@ public class QosManagerTool extends BaseGridTool
 		spec.ReservedSize = 30;
 		container_list.clear();
 		container_list.add("container2");
-		db_add_scheduled_spec(spec, "bck",container_list, false);
+		db_add_scheduled_directory("bck", spec, container_list, false);
 		db_summary(true);
 
 		System.out.println("#### DB Test 7: Remove a spec");
@@ -1493,7 +1602,7 @@ public class QosManagerTool extends BaseGridTool
 		container_list.clear();
 		container_list.add("container1");
 		container_list.add("container2");
-		db_add_scheduled_spec(spec, "bck",container_list, true);
+		db_add_scheduled_directory("bck", spec, container_list, true);
 		db_summary(false);
 		db_summary(true);
 
@@ -1518,8 +1627,14 @@ public class QosManagerTool extends BaseGridTool
 	/**************************************************************************
 	 *  QoS Checker
 	 **************************************************************************/
-	// Check if disk space is satisfied
-	// Rule: for every container, free space >= (client reserved - client used)
+
+	/**
+	 * QoS Checker: Check space.
+	 * Rule: for every container, free space >= (client reserved - client used)
+	 * @param spec
+	 * @param status_list
+	 * @return
+	 */
 	private boolean check_space(QosSpec spec, List<ContainerStatus> status_list) {
 		for (int i = 0; i < status_list.size(); i++) {
 			ContainerStatus status = status_list.get(i);
@@ -1530,7 +1645,13 @@ public class QosManagerTool extends BaseGridTool
 		return status_list.size() > 0;
 	}
 
-	// Reliability rule: All container together should satisfy the spec
+	/**
+	 * QoS Checker: Check reliability.
+	 * Rule: All container together should satisfy the spec.
+	 * @param spec
+	 * @param status_list
+	 * @return
+	 */
 	private boolean check_reliability(QosSpec spec, List<ContainerStatus> status_list) {
 		double spec_reliability = Double.parseDouble("0." + Integer.toString(spec.Reliability));
 		double container_failure = 1.0;
@@ -1546,7 +1667,13 @@ public class QosManagerTool extends BaseGridTool
 		}
 	}
 
-	// Availability rule: All container together should satisfy the spec
+	/**
+	 * QoS Checker: Check availability.
+	 * Rule: All container together should satisfy the spec.
+	 * @param spec
+	 * @param status_list
+	 * @return
+	 */
 	private boolean check_availability(QosSpec spec, List<ContainerStatus> status_list) {
 		double spec_availability = Double.parseDouble("0." + Integer.toString(spec.Availability));
 		double container_unavailable = 1.0;
@@ -1562,8 +1689,14 @@ public class QosManagerTool extends BaseGridTool
 		}
 	}
 
-	// Bandwidth rule: Even if there are multiple replications, client only use
-	// one container for the spec. Only check the primary container.
+	/**
+	 * QoS Checker: Check bandwidth.
+	 * Rule: Even if there are multiple replications, client only use one
+	 * container for the spec. Only check the primary container.
+	 * @param spec
+	 * @param status_list
+	 * @return
+	 */
 	boolean check_bandwidth(QosSpec spec, List<ContainerStatus> status_list) {
 		if (spec.Bandwidth == "Low") {
 			return true;
@@ -1581,7 +1714,13 @@ public class QosManagerTool extends BaseGridTool
 		}
 	}
 
-	// Rule: Every container should satisfy the data integrity requirement.
+	/**
+	 * QoS Checker: Check data integrity.
+	 * Rule: Every container should satisfy the data integrity requirement.
+	 * @param spec
+	 * @param status_list
+	 * @return
+	 */
 	boolean check_dataintegrity(QosSpec spec, List<ContainerStatus> status_list) {
 		for (int i = 0; i < status_list.size(); i++) {
 			ContainerStatus status = status_list.get(i);
@@ -1592,8 +1731,13 @@ public class QosManagerTool extends BaseGridTool
 		return true;
 	}
 
-	// check latency using physical location, assuming if first two levels
-	// are the same, the latency can be satisfied; only check the primary
+	/**
+	 * QoS Checker: Check latency using physical location, assuming if first two
+	 * levels are the same, the latency can be satisfied; only check the primary
+	 * @param spec
+	 * @param status_list
+	 * @return
+	 */
 	boolean check_latency(QosSpec spec, List<ContainerStatus> status_list) {
 		if (spec.Latency == "High") {
 			return true;
@@ -1609,54 +1753,67 @@ public class QosManagerTool extends BaseGridTool
 		}
 	}
 
-	// QoS Checker main entry: Check if a list of container can satisfy a spec
-	boolean check_all(QosSpec spec, List<ContainerStatus> status_list) {
-		System.out.println("(qm) checker: Check satisfiability of spec " + spec.SpecId +
-				" on containers " + status_list.toString());
-		boolean satisfied = true;
+	/**
+	 * QoS Checker: Check if a list of container can satisfy a spec
+	 * @param spec
+	 * @param status_list
+	 * @return
+	 */
+	boolean check_all(QosSpec spec, List<ContainerStatus> status_list, boolean verbose) {
+		if (verbose) {
+			System.out.println("(qm) checker: Check satisfiability of spec "
+					+ spec.SpecId + " on containers " + status_list.toString());
+		}
 		if (status_list.size() == 0) { // not scheduled
 			return false;
 		}
 		// Check disk space
-		satisfied = satisfied && check_space(spec, status_list);
-		if (!satisfied) {
-			System.out.println("(qm) checker:  Disk space not satisfied for spec: " + spec.SpecId);
+		if (!check_space(spec, status_list)) {
+			if (verbose) System.out.println("(qm) checker:  Disk space not satisfied for spec: " + spec.SpecId);
+			return false;
 		}
 		// Check data integrity
-		satisfied = satisfied && check_dataintegrity(spec, status_list);
-		if (!satisfied) {
-			System.out.println("(qm) checker:  Dataintegrity not satisfied for spec: " + spec.SpecId);
+		if (!check_dataintegrity(spec, status_list)) {
+			if (verbose) System.out.println("(qm) checker:  Dataintegrity not satisfied for spec: " + spec.SpecId);
+			return false;
 		}
 		// Check reliability
-		satisfied = satisfied && check_reliability(spec, status_list);
-		if (!satisfied) {
-			System.out.println("(qm) checker:  Reliability not satisfied for spec: " + spec.SpecId);
+		if (!check_reliability(spec, status_list)) {
+			if (verbose) System.out.println("(qm) checker:  Reliability not satisfied for spec: " + spec.SpecId);
+			return false;
 		}
 		// Check availability
-		satisfied = satisfied && check_availability(spec, status_list);
-		if (!satisfied) {
-			System.out.println("(qm) checker:  Availability not satisfied for spec: " + spec.SpecId);
+		if (!check_availability(spec, status_list)) {
+			if (verbose) System.out.println("(qm) checker:  Availability not satisfied for spec: " + spec.SpecId);
+			return false;
 		}
 		// Check bandwidth
-		satisfied = satisfied && check_bandwidth(spec, status_list);
-		if (!satisfied) {
-			System.out.println("(qm) checker:  Bandwidth not satisfied for spec: " + spec.SpecId);
+		if (!check_bandwidth(spec, status_list)) {
+			if (verbose) System.out.println("(qm) checker:  Bandwidth not satisfied for spec: " + spec.SpecId);
+			return false;
 		}
 		// Check latency
-		satisfied = satisfied && check_latency(spec, status_list);
-		if (!satisfied) {
-			System.out.println("(qm) checker:  Latency not satisfied for spec: " + spec.SpecId);
+		if (!check_latency(spec, status_list)) {
+			if (verbose) System.out.println("(qm) checker:  Latency not satisfied for spec: " + spec.SpecId);
+			return false;
 		}
-		if (satisfied) {
+
+		if (verbose) {
 			System.out.println("(qm) checker:  Spec " + spec.SpecId + " is satisfied on " + status_list.toString());
 		}
-		return satisfied;
+		return true;
 	}
 
 	/**************************************************************************
 	 *  QoS Scheduler
 	 **************************************************************************/
-	// Schedule filter: filter out some single containers
+
+	/**
+	 * QoS Scheduler: Schedule filter: filter out some single containers
+	 * @param spec
+	 * @param status
+	 * @return
+	 */
 	boolean schedule_filter(QosSpec spec, ContainerStatus status) {
 		if (status.ContainerAvailability <= 0) return false;
 		if (status.StorageReliability <= 0) return false;
@@ -1667,8 +1824,13 @@ public class QosManagerTool extends BaseGridTool
 		return true;
 	}
 
-	// return a list of scheduled container ids
-	private List<String> schedule(String spec_path, String spec_id) {
+	/**
+	 * QoS Scheduler: Schedule for a specification file
+	 * @param spec_path
+	 * @param spec_id
+	 * @return a list of scheduled container IDs
+	 */
+	private List<String> schedule_internal(String spec_path, String spec_id) {
 		assert(spec_path == null && spec_id != null || spec_path != null && spec_id == null);
 		List<String> scheduled_containers = new ArrayList<String>();
 		QosSpec spec = null;
@@ -1698,7 +1860,7 @@ public class QosManagerTool extends BaseGridTool
 		for (int i = 0; i < status_list.size(); i++) {
 			tmp.clear();
 			tmp.add(status_list.get(i));
-			if (check_all(spec, tmp)) {
+			if (check_all(spec, tmp, false)) {
 				scheduled = true;
 				break;
 			}
@@ -1710,7 +1872,7 @@ public class QosManagerTool extends BaseGridTool
 					tmp.clear();
 					tmp.add(status_list.get(i));
 					tmp.add(status_list.get(j));
-					if (check_all(spec, tmp)) {
+					if (check_all(spec, tmp, false)) {
 						scheduled = true;
 						break;
 					}
@@ -1726,7 +1888,7 @@ public class QosManagerTool extends BaseGridTool
 						tmp.add(status_list.get(i));
 						tmp.add(status_list.get(j));
 						tmp.add(status_list.get(k));
-						if (check_all(spec, tmp)) {
+						if (check_all(spec, tmp, false)) {
 							scheduled = true;
 							break;
 						}
@@ -1745,7 +1907,7 @@ public class QosManagerTool extends BaseGridTool
 							tmp.add(status_list.get(j));
 							tmp.add(status_list.get(k));
 							tmp.add(status_list.get(l));
-							if (check_all(spec, tmp)) {
+							if (check_all(spec, tmp, false)) {
 								scheduled = true;
 								break;
 							}
@@ -1767,7 +1929,13 @@ public class QosManagerTool extends BaseGridTool
 		return scheduled_containers;
 	}
 
-	// Wrapper for calling the QoS scheduler from other files.
+	/**
+	 * QoS Scheduler: Wrapper for calling the QoS scheduler from other files.
+	 * @param spec_path
+	 * @param spec_id
+	 * @param target_path
+	 * @return
+	 */
 	public List<String> schedule_wrapper(String spec_path, String spec_id, String target_path) {
 		assert(spec_path == null && spec_id != null || spec_path != null && spec_id == null);
 		List<String> scheduled_containers = new ArrayList<String>();
@@ -1778,12 +1946,18 @@ public class QosManagerTool extends BaseGridTool
 		}
 		boolean succ = db_sync_down();
 		if (succ) {
-			scheduled_containers = schedule(spec_path, spec_id);
+			scheduled_containers = schedule_internal(spec_path, spec_id);
 		}
 		return scheduled_containers;
 	}
 
-	// Wrapper for committing the scheduling results to the QoS database.
+	/**
+	 * QoS Scheduler: Wrapper for committing the scheduling results to the QoS database.
+	 * @param spec_path
+	 * @param mkdir_path
+	 * @param scheduled_rns
+	 * @return
+	 */
 	public boolean commit_scheduling_results(String spec_path, String mkdir_path,
 			List<String> scheduled_rns)
 	{
@@ -1805,17 +1979,23 @@ public class QosManagerTool extends BaseGridTool
 				QosSpec spec = new QosSpec();
 				succ = spec.read_from_file(spec_path);
 				if (succ) {
-					db_add_scheduled_spec(spec, mkdir_path, container_ids, true);
+					db_add_scheduled_directory(mkdir_path, spec, container_ids, true);
 					succ = db_sync_up();
 				}
 			}
 		}
 		return succ;
 	}
+
 	/**************************************************************************
 	 *  QoS Monitors
 	 **************************************************************************/
-	// Check if the RNS is valid
+
+	/**
+	 * QoS Monitor: Check if the RNS is valid
+	 * @param rns_path
+	 * @return
+	 */
 	private boolean is_rns_valid(String rns_path) {
 		GeniiPath path = new GeniiPath(rns_path);
 		// should be a grid path
@@ -1836,7 +2016,11 @@ public class QosManagerTool extends BaseGridTool
 		return true;
 	}
 
-	// Check if the Resource Naming Service of a grid folder is available.
+	/**
+	 * QoS Monitor: Check if the Resource Naming Service of a grid folder is available.
+	 * @param rns_path
+	 * @return
+	 */
 	private boolean is_rns_available(String rns_path) {
 		if (!is_rns_valid(rns_path)) {
 			return false;
@@ -1851,6 +2035,7 @@ public class QosManagerTool extends BaseGridTool
 			GeniiCommon common = ClientUtils.createProxy(GeniiCommon.class, service);
 			common.getResourcePropertyDocument(new GetResourcePropertyDocument());
 		} catch (Exception e) {
+			System.out.println(e.getClass().getName() + ": " + e.getMessage());
 			System.out.println("(qm) Warning: " + rns_path + " is not available.");
 			return false;
 		}
@@ -1858,7 +2043,11 @@ public class QosManagerTool extends BaseGridTool
 		return true;
 	}
 
-	// Monitor a qos spec
+	/**
+	 * QoS Monitor: Monitor a qos spec
+	 * @param spec_id
+	 * @return
+	 */
 	private boolean monitor_spec(String spec_id) {
 		List<String> container_ids = db_get_container_ids_for_spec(spec_id);
 		QosSpec spec = db_get_spec(spec_id);
@@ -1866,19 +2055,23 @@ public class QosManagerTool extends BaseGridTool
 		for (int i = 0; i < container_ids.size(); i++) {
 			status_list.add(db_get_status(container_ids.get(i)));
 		}
-		boolean satisfied = check_all(spec, status_list);
+		boolean satisfied = check_all(spec, status_list, true);
 		if (!satisfied) {
 			// reschedule
-			List<String> rescheduled = schedule(null, spec_id);
+			List<String> rescheduled = schedule_internal(null, spec_id);
 			//directory to make is needed here as second parameter
-			db_add_scheduled_spec(spec, "", rescheduled, false); //update
+			db_add_scheduled_directory("", spec, rescheduled, false); //update
 			System.out.println("(qm) Monitor spec NYI.");
 			// TODO: support new db definition
 		}
 		return true;
 	}
 
-	// Monitor qos specs related to a container
+	/**
+	 * QoS Monitor: Monitor qos specs related to a container
+	 * @param container_id
+	 * @return
+	 */
 	private boolean monitor_specs_on_container(String container_id) {
 		List<String> spec_ids = db_get_spec_ids_on_container(container_id);
 		for (int i = 0; i < spec_ids.size(); i++) {
@@ -1887,7 +2080,11 @@ public class QosManagerTool extends BaseGridTool
 		return true;
 	}
 
-	// Update status of a container to qos database
+	/**
+	 * QoS Monitor: Update status of a container to qos database
+	 * @param container_id
+	 * @return
+	 */
 	private boolean monitor_container(String container_id) {
 		ContainerStatus status_in_db = db_get_status(container_id);
 		assert(status_in_db != null);
@@ -1915,7 +2112,10 @@ public class QosManagerTool extends BaseGridTool
 		return true;
 	}
 
-	// Monitor all containers in the qos database.
+	/**
+	 * QoS Monitor: Monitor all containers in the qos database.
+	 * @return
+	 */
 	private boolean monitor_all() {
 		// Step 1: update all containers
 		List<String> container_ids = db_get_container_id_list();
@@ -1933,7 +2133,12 @@ public class QosManagerTool extends BaseGridTool
 	/**************************************************************************
 	 *  Miscellaneous Functions
 	 **************************************************************************/
-	// Get the end point identifier of a path
+
+	/**
+	 * Get the End Point Identifier of a path
+	 * @param path
+	 * @return
+	 */
 	private String get_epi(String path) {
 		GeniiPath gPath = new GeniiPath(path);
 		String epi = null;
@@ -1945,14 +2150,18 @@ public class QosManagerTool extends BaseGridTool
 			WSName wsname = new WSName(epr);
 			epi = wsname.getEndpointIdentifier().toString();
 		} catch (Exception e) {
+			System.out.println(e.getClass().getName() + ": " + e.getMessage());
 			System.out.println("(qm) Error: Cannot get EPI of " + path);
-			System.out.println(e.toString());
 			epi = null;
 		}
 		return epi;
 	}
 
-	// For the --status-template=<rns-path> option.
+	/**
+	 * A function to support the qos-manager --status-template=<rns-path> option
+	 * @param rns_path
+	 * @return
+	 */
 	private ContainerStatus gen_status_template(String rns_path) {
 		if (!is_rns_valid(rns_path)) {
 			return null;
@@ -1979,8 +2188,10 @@ public class QosManagerTool extends BaseGridTool
 		return status;
 	}
 
-	// Replicate function based on ReplicateTool.java.
-	// The save as: replicate -p  <source-path> <container> [replicant number]
+	/**
+	 * A replicate function copied from ReplicateTool.java.
+	 * The same as: replicate -p  <source-path> <container> [replicant number]
+	 */
 	public int replicate_policy(String sourcePath, String containerPath, String linkPath)
 			throws ReloadShellException, ToolException, UserCancelException,
 			RNSException, AuthZSecurityException, IOException, ResourcePropertyException
@@ -2045,7 +2256,9 @@ public class QosManagerTool extends BaseGridTool
 		return 0;
 	}
 
-	// Replicate function based on ReplicateTool.java
+	/**
+	 * A replicate function copied from ReplicateTool.java
+	 */
 	private void addPolicy(RNSPath currentRNS, Stack<RNSPath> stack) throws RemoteException, RNSException
 	{
 		System.out.println("(qm) addPolicy " + currentRNS);
@@ -2063,8 +2276,10 @@ public class QosManagerTool extends BaseGridTool
 		}
 	}
 
-	// Resolver function based on ResolverTool.java.
-	// The same as: resolver -p <source-path> <resolver-path>
+	/**
+	 * A resolver function copied from ResolverTool.java.
+	 * The same as running: resolver -p <source-path> <resolver-path>
+	 */
 	public int resolver_policy(String sourcePath, String targetPath, boolean recursive)
 			throws ReloadShellException, ToolException, UserCancelException,
 			RNSException, AuthZSecurityException, IOException, ResourcePropertyException
@@ -2100,7 +2315,9 @@ public class QosManagerTool extends BaseGridTool
 		return 0;
 	}
 
-	// Resolver function based on ResolverTool.java
+	/**
+	 * A resolver function copied from ResolverTool.java
+	 */
 	private void addResolver(RNSPath sourceRNS, EndpointReferenceType resolverEPR,
 			Stack<RNSPath> stack, boolean recursive)
 			throws IOException, RNSException

@@ -230,7 +230,7 @@ public class MkdirTool extends BaseGridTool
 						}
 					}
 				} catch (Exception e) {
-					System.out.println(e.toString());
+					System.out.println(e.getClass().getName() + ": " + e.getMessage());
 					//e.printStackTrace();
 					return -1;
 				}
