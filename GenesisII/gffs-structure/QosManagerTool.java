@@ -660,6 +660,7 @@ public class QosManagerTool extends BaseGridTool
 				System.out.println("(qm) Warning: QoS database already exists. To rebuild an empty");
 				System.out.println("     QoS database, please remove grid:" + db_grid_path);
 			} else {
+				db_destroy();
 				db_init();
 				db_sync_up();
 			}
@@ -678,13 +679,10 @@ public class QosManagerTool extends BaseGridTool
 			if (status != null) {
 				System.out.println(status.to_string());
 			}
-		} else if (_test) {
+		} else if (_test) { // internal
 			System.out.println("(qm) internal: Test the QoS manager.");
-			succ = db_sync_down();
-			if (succ) {
-				test_db();
-				db_sync_up();
-			}
+			// Should not sync up or down.
+			test_db();
 		} else {
 			System.out.println("(qm) main: Please run 'man qos-manager' for usable options.");
 		}
@@ -789,7 +787,7 @@ public class QosManagerTool extends BaseGridTool
 		}
 		GeniiPath dbFileGrid = new GeniiPath(db_grid_path);
 		// The qos.db file in grid home directory should be removed by hand
-		assert(!dbFileGrid.exists());
+		assert(dbFileGrid.exists() == false);
 
 		File dbFileLocal = new File(db_local_path);
 		if (dbFileLocal.exists()) {
@@ -804,8 +802,6 @@ public class QosManagerTool extends BaseGridTool
 	 * @return
 	 */
 	private boolean db_init() {
-		db_destroy();
-
 		Connection conn = null;
 		Statement stmt = null;
 		try {
@@ -1065,6 +1061,9 @@ public class QosManagerTool extends BaseGridTool
 		assert(scheduled_container_ids != null && scheduled_container_ids.size() > 0);
 		Connection conn = null;
 		Statement stmt = null;
+
+		GeniiPath dir = new GeniiPath(mkdir_path);
+		mkdir_path = "grid:" + dir.lookupRNS();
 
 		// TODO: file copy
 		// TODO: need to rewrite
@@ -1353,6 +1352,37 @@ public class QosManagerTool extends BaseGridTool
 	}
 
 	/**
+	 * QoS DB: Given a specification, get all directories that use this spec.
+	 * @param spec_id
+	 * @return
+	 */
+	private List<String> db_get_dirs_for_spec(String spec_id) {
+		assert(spec_id != null);
+		System.out.println("(qm) db: Get directories for specification: " + spec_id);
+		Set<String> dirs = new HashSet<String>();
+		Connection conn = null;
+		Statement stmt = null;
+
+		try {
+			Class.forName("org.sqlite.JDBC");
+			conn = DriverManager.getConnection("jdbc:sqlite:" + db_get_local_path());
+			stmt = conn.createStatement();
+
+			String sql = "SELECT Directory FROM Relationships WHERE SpecId = '" + spec_id + "';";
+			ResultSet rs = stmt.executeQuery(sql);
+			while (rs.next()) {
+				dirs.add(rs.getString(1));
+			}
+			stmt.close();
+			conn.close();
+		} catch (Exception e) {
+			System.out.println(e.getClass().getName() + ": " + e.getMessage());
+			dirs.clear();
+		}
+		return new ArrayList<String>(dirs);
+	}
+
+	/**
 	 * QoS DB: Given a container, get all related specs IDs.
 	 * @param container_id
 	 * @return
@@ -1439,6 +1469,35 @@ public class QosManagerTool extends BaseGridTool
 			spec_ids.clear();
 		}
 		return spec_ids;
+	}
+
+	/**
+	 * QoS DB: Get the list of directories.
+	 * @return
+	 */
+	private List<String> db_get_dir_list() {
+		System.out.println("(qm) db: Get directory list. ");
+		Set<String> dirs = new HashSet<String>();
+		Connection conn = null;
+		Statement stmt = null;
+
+		try {
+			Class.forName("org.sqlite.JDBC");
+			conn = DriverManager.getConnection("jdbc:sqlite:" + db_get_local_path());
+			stmt = conn.createStatement();
+
+			String sql = "SELECT Directory From Relationships;";
+			ResultSet rs = stmt.executeQuery(sql);
+			while (rs.next()) {
+				dirs.add(rs.getString(1));
+			}
+			stmt.close();
+			conn.close();
+		} catch (Exception e) {
+			System.out.println(e.getClass().getName() + ": " + e.getMessage());
+			dirs.clear();
+		}
+		return new ArrayList<String>(dirs);
 	}
 
 	/**
@@ -1540,8 +1599,17 @@ public class QosManagerTool extends BaseGridTool
 
 	/**
 	 * QoS DB: Internal function for testing the QoS DB.
+	 * Will not affect the qos.db in grid home directory.
 	 */
 	private void test_db() {
+		// Starts from an empty local db
+		String db_local_path = db_get_local_path();
+		if (db_local_path == null) return;
+		File dbFileLocal = new File(db_local_path);
+		if (dbFileLocal.exists()) {
+			dbFileLocal.delete();
+		}
+
 		System.out.println("#### DB Test 0: Show empty QoS database");
 		db_init();
 		db_summary(false);
@@ -1622,6 +1690,11 @@ public class QosManagerTool extends BaseGridTool
 		spec = db_get_spec("client1-spec1");
 		if (spec != null) System.out.println(spec.to_sql_string());
 		else System.out.println("Error");
+
+		List<String> dirs = null;
+		dirs = db_get_dir_list();
+		if (dirs == null) System.out.println("Error");
+		else System.out.println("Directories in DB: " + dirs.toString());
 	}
 
 	/**************************************************************************
@@ -2081,7 +2154,8 @@ public class QosManagerTool extends BaseGridTool
 	}
 
 	/**
-	 * QoS Monitor: Update status of a container to qos database
+	 * QoS Monitor: Update status of a container to qos database.
+	 * Will not do scheduling here.
 	 * @param container_id
 	 * @return
 	 */
