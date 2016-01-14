@@ -18,7 +18,6 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -855,7 +854,7 @@ public class QosManagerTool extends BaseGridTool
 			// ResolverFlag: 1 resolver, 0 not
 			// ReplicaId: non-negative: actual id, negative: (abs - 1) id to remove
 			// ON CONFLICT REPLACE?
-			String sql = "CREATE TABLE Relationships(Directory TEXT, SpecId TEXT, ContainerId TEXT, ReplicaFlag INT, ResoverFlag INT, ReplicaId INT, UNIQUE(Directory, SpecId, ContainerId), UNIQUE(Directory, ReplicaId));";
+			String sql = "CREATE TABLE Relationships(Directory TEXT, SpecId TEXT, ContainerId TEXT, ReplicaFlag INT, ResolverFlag INT, ReplicaId INT, UNIQUE(Directory, SpecId, ContainerId), UNIQUE(Directory, ReplicaId));";
 			stmt.executeUpdate(sql);
 
 			stmt.close();
@@ -1153,162 +1152,161 @@ public class QosManagerTool extends BaseGridTool
 		GeniiPath dir = new GeniiPath(mkdir_path);
 		mkdir_path = "grid:" + dir.lookupRNS();
 
-		// TODO: file copy
-		// TODO: need to rewrite
 		try {
 			Class.forName("org.sqlite.JDBC");
 			conn = DriverManager.getConnection("jdbc:sqlite:" + db_get_local_path());
 			stmt = conn.createStatement();
 
-			if (init) {
-				// Insert new spec
-				System.out.println("(qm) db: Insert scheduled spec: " + spec.SpecId + " for directory: " + mkdir_path);
+			List<String> container_ids_old = new ArrayList<String>();
+			container_ids_old = db_rel_query(RelQuery.CONTAINERS_RELATED_TO_DIR, mkdir_path);
+			//check if directory exists
+			String sql = "SELECT * FROM Relationships WHERE Directory = '" + mkdir_path + "';";
+			ResultSet rs = stmt.executeQuery(sql);
+			if (rs.next()) {
+				if (init==true) {
+					System.out.println("(qm) db: Error: directory should not exist if it is created for the first time");
+				}
+				else {
+					//check if spec exists
+					sql = "SELECT * FROM Specifications WHERE SpecId = '" + spec.SpecId + "';";
+					rs = stmt.executeQuery(sql);
+					if (rs.next()) {
+						String old_spec = "SELECT ReservedSize FROM Specifications WHERE SpecId = '"
+								+ spec.SpecId + "';";
+						ResultSet old_reserved = stmt.executeQuery(old_spec);
+						int old_spec_reserved = old_reserved.getInt(1);
+						for (int i = 0; i < scheduled_container_ids.size(); i++) {
+							if (container_ids_old.contains(scheduled_container_ids.get(i))) {
+								// a container both in old and new
+								//update reserved storage
+								String con_storagereserved = "SELECT StorageReserved FROM Containers WHERE ContainerId = '"
+										+ scheduled_container_ids.get(i) + "';";
+								ResultSet con_reserved = stmt.executeQuery(con_storagereserved);
+								int container_storagereserved = con_reserved.getInt(1) + spec.ReservedSize - old_spec_reserved;
+								String sql_update_rstorage = "UPDATE Containers SET StorageReserved = " + container_storagereserved
+										+ " where ContainerID = '" + scheduled_container_ids.get(i) + "';";
+								stmt.executeUpdate(sql_update_rstorage);
 
-				String sql = "INSERT INTO Specifications VALUES (" + spec.to_sql_string() + ");";
-				stmt.executeUpdate(sql);
-				if (scheduled_container_ids.size() == 1) {
-					sql = "INSERT INTO Relationships VALUES ('" + mkdir_path + "','" + spec.SpecId + "','"
-							+ scheduled_container_ids.get(0) + "'," + 1 + "," + 0 + ");";
-					stmt.executeUpdate(sql);
-					String con_storagereserved = "SELECT StorageReserved FROM Containers WHERE ContainerId = '"
-							+ scheduled_container_ids.get(0) + "';";
-					ResultSet con_reserved = stmt.executeQuery(con_storagereserved);
-					int container_storagereserved = con_reserved.getInt(1) + spec.ReservedSize;
-
-					String sql_update_rstorage = "UPDATE Containers SET StorageReserved = " + container_storagereserved
-							+ " where ContainerID = '" + scheduled_container_ids.get(0) + "';";
-					stmt.executeUpdate(sql_update_rstorage);
-				} else {
+								String sql_replicaid = "SELECT ReplicaId FROM Relationships WHERE ContainerId = '"
+										+ scheduled_container_ids.get(i) + "' AND " + "Directory = '" + mkdir_path + "';";
+								System.out.println(sql_replicaid);
+								ResultSet rs_old_replicaid = stmt.executeQuery(sql_replicaid);
+								int replicaid = rs_old_replicaid.getInt(1);
+								//update relationships and set replicaID, replicaflag and resolverflag
+								if (scheduled_container_ids.size() == 1) {
+									sql = "UPDATE Relationships SET ReplicaFlag = 1, ResolverFlag = 0, ReplicaID = " + i
+											+ " Where Directory = '" + mkdir_path + "' AND ContainerId = '" + scheduled_container_ids.get(0) + "';";
+									System.out.println(sql);
+									stmt.executeUpdate(sql);
+								} else {
+									if (i == 0) {
+										sql = "UPDATE Relationships SET ReplicaFlag = 1, ResolverFlag = 0, ReplicaID = " + i
+												+ " Where Directory = '" + mkdir_path + "' AND ContainerId = '" + scheduled_container_ids.get(0) + "';";
+										System.out.println(sql);
+									} else if (i == 1) {
+										sql = "UPDATE Relationships SET ReplicaFlag = 0, ResolverFlag = 1, ReplicaID = " + i
+												+ " Where Directory = '" + mkdir_path + "' AND ContainerId = '" + scheduled_container_ids.get(i) + "';";
+										System.out.println(sql);
+									} else {
+										sql = "UPDATE Relationships SET ReplicaFlag = 0, ResolverFlag = 0, ReplicaID = " + i
+												+ " Where Directory = '" + mkdir_path + "' AND ContainerId = '" + scheduled_container_ids.get(i) + "';";
+										System.out.println(sql);
+									}
+									stmt.executeUpdate(sql);
+								}
+							} else {
+								// a container only in new: create and file copy
+								String con_storagereserved = "SELECT StorageReserved FROM Containers WHERE ContainerId = '"
+										+ scheduled_container_ids.get(i) + "';";
+								ResultSet con_reserved = stmt.executeQuery(con_storagereserved);
+								int container_storagereserved = con_reserved.getInt(1) + spec.ReservedSize;
+								String sql_update_rstorage = "UPDATE Containers SET StorageReserved = " + container_storagereserved
+										+ " where ContainerID = '" + scheduled_container_ids.get(i) + "';";
+								stmt.executeUpdate(sql_update_rstorage);
+								String sql_replicaid = "SELECT MAX(ReplicaId) FROM Relationships WHERE Directory = '"
+										+ mkdir_path + "';";
+								ResultSet rs_old_replicaid = stmt.executeQuery(sql_replicaid);
+								int replicaid = rs_old_replicaid.getInt(1);
+								//insert to relationships and set replicaID, replicaflag and resolverflag
+								if (scheduled_container_ids.size() == 1) {
+									sql = "INSERT INTO Relationships VALUES ('" + mkdir_path + "','" + spec.SpecId + "', '" +scheduled_container_ids.get(0)+ "' ,"
+											+ 1 + "," + 0 + "," + i + ");";
+									stmt.executeUpdate(sql);
+								} else {
+									if (i == 0) {
+										sql = "INSERT INTO Relationships VALUES ('" + mkdir_path + "','" + spec.SpecId + "', '" +scheduled_container_ids.get(0)+ "' ,"
+												+ 1 + "," + 0 + "," + i + ");";
+									} else if (i == 1) {
+										sql = "INSERT INTO Relationships VALUES ('" + mkdir_path + "','" + spec.SpecId + "', '" +scheduled_container_ids.get(i)+ "' ,"
+												+ 0 + "," + 1 + "," + i + ");";
+									} else {
+										sql = "INSERT INTO Relationships VALUES ('" + mkdir_path + "','" + spec.SpecId + "', '" +scheduled_container_ids.get(i)+ "' ,"
+												+ 0 + "," + 0 + "," + i + ");";
+									}
+									stmt.executeUpdate(sql);
+								}
+								System.out.println("(qm) db : File copy for specification " + spec.SpecId + " to " + scheduled_container_ids.get(i));
+							}
+						}
+						//for old containers which do not exist in new scheduled containers
+						for (int i = 0; i <container_ids_old.size(); i++) {
+							if (!scheduled_container_ids.contains(container_ids_old.get(i))) {
+								//update container reserved size
+								String con_storagereserved = "SELECT StorageReserved FROM Containers WHERE ContainerId = '"
+										+ container_ids_old.get(i) + "';";
+								ResultSet con_reserved = stmt.executeQuery(con_storagereserved);
+								int container_storagereserved = con_reserved.getInt(1) - old_spec_reserved + spec.ReservedSize;
+								String sql_update_rstorage = "UPDATE Containers SET StorageReserved = " + container_storagereserved
+										+ " where ContainerID = '" + container_ids_old.get(i) + "';";
+								stmt.executeUpdate(sql_update_rstorage);
+								System.out.println("(qm) db : Delete strorage of specification " + spec.SpecId + " on " + container_ids_old.get(i));
+								//remove from relationships are left for clean replica
+							}
+						}
+					}
+					else {
+						System.out.println("(qm) db: Error: specification should exist for existing directory");
+					}
+				}
+			}
+			else {
+				if (init==false) {
+					System.out.println("(qm) db: Error: directory should exist");
+				}
+				else {
+					//check if spec exists
+					sql = "SELECT * FROM Specifications WHERE SpecId = '" + spec.SpecId + "';";
+					rs = stmt.executeQuery(sql);
+					if (rs.next()) {
+						//update specfication
+						db_update_spec(spec,false);
+					}
+					else {
+						//insert new specification
+						sql = "INSERT INTO Specifications VALUES (" + spec.to_sql_string() + ");";
+						stmt.executeUpdate(sql);
+					}
 					for (int i = 0; i < scheduled_container_ids.size(); i++) {
+						//update container reserved size
+						String con_storagereserved = "SELECT StorageReserved FROM Containers WHERE ContainerId = '"
+								+ scheduled_container_ids.get(i) + "';";
+						ResultSet con_reserved = stmt.executeQuery(con_storagereserved);
+						int container_storagereserved = con_reserved.getInt(1) + spec.ReservedSize;
+						String sql_update_rstorage = "UPDATE Containers SET StorageReserved = " + container_storagereserved
+								+ " where ContainerID = '" + scheduled_container_ids.get(i) + "';";
+						stmt.executeUpdate(sql_update_rstorage);
+						//insert into relationships
 						if (i == 0) {
-							sql = "INSERT INTO Relationships VALUES ('" + mkdir_path + "','" + spec.SpecId + "','"
-									+ scheduled_container_ids.get(0) + "'," + 1 + "," + 0 + ");";
+							sql = "INSERT INTO Relationships VALUES ('" + mkdir_path + "','" + spec.SpecId + "', '" +scheduled_container_ids.get(0)+ "' ,"
+									+ 1 + "," + 0 + "," + i + ");";
 						} else if (i == 1) {
-							sql = "INSERT INTO Relationships VALUES ('" + mkdir_path + "','" + spec.SpecId + "','"
-									+ scheduled_container_ids.get(1) + "'," + 0 + "," + 1 + ");";
+							sql = "INSERT INTO Relationships VALUES ('" + mkdir_path + "','" + spec.SpecId + "', '" +scheduled_container_ids.get(i)+ "' ,"
+									+ 0 + "," + 1 + "," + i + ");";
 						} else {
-							sql = "INSERT INTO Relationships VALUES ('" + mkdir_path + "','" + spec.SpecId + "','"
-									+ scheduled_container_ids.get(i) + "'," + 0 + "," + 0 + ");";
+							sql = "INSERT INTO Relationships VALUES ('" + mkdir_path + "','" + spec.SpecId + "', '" +scheduled_container_ids.get(i)+ "' ,"
+									+ 0 + "," + 0 + "," + i + ");";
 						}
 						stmt.executeUpdate(sql);
-						String con_storagereserved = "SELECT StorageReserved FROM Containers WHERE ContainerId = '"
-								+ scheduled_container_ids.get(i) + "';";
-						ResultSet con_reserved = stmt.executeQuery(con_storagereserved);
-						int container_storagereserved = con_reserved.getInt(1) + spec.ReservedSize;
-
-						String sql_update_rstorage = "UPDATE Containers SET StorageReserved = " + container_storagereserved
-								+ " where ContainerID = '" + scheduled_container_ids.get(i) + "';";
-						stmt.executeUpdate(sql_update_rstorage);
-					}
-				}
-			} else {
-				// Update existing spec
-				List<String> container_ids_old = new ArrayList<String>();
-				container_ids_old = db_rel_query(RelQuery.CONTAINERS_RELATED_TO_SPEC, spec.SpecId);
-
-				System.out.println("(qm) db: Update scheduled spec: " + spec.SpecId);
-
-				String old_spec = "SELECT ReservedSize FROM Specifications WHERE SpecId = '"
-						+ spec.SpecId + "';";
-				ResultSet old_reserved = stmt.executeQuery(old_spec);
-				int old_spec_reserved = old_reserved.getInt(1);
-
-				String sql = "DELETE FROM Specifications WHERE SpecId = '" + spec.SpecId + "';";
-				stmt.executeUpdate(sql);
-
-				sql = "INSERT INTO Specifications VALUES (" + spec.to_sql_string() + ");";
-				stmt.executeUpdate(sql);
-
-				//get all affected directory and reschedule for these directory
-				List<String> directory_list = new ArrayList<String>();
-				String sql_directorylist = "SELECT Directory FROM Relationships WHERE SpecId = '" + spec.SpecId + "';";
-				ResultSet rs = stmt.executeQuery(sql_directorylist);
-				//there are duplicated results here
-				while (rs.next()) {
-					//System.out.println(rs.getString(1));
-					directory_list.add(rs.getString(1));
-				}
-				directory_list = new ArrayList<String>(new LinkedHashSet<String>(directory_list));
-
-				sql = "DELETE FROM Relationships WHERE SpecId = '" + spec.SpecId + "';";
-				stmt.executeUpdate(sql);
-
-				for (int i = 0; i < scheduled_container_ids.size(); i++) {
-
-					if (container_ids_old.contains(scheduled_container_ids.get(i))) {
-						// a container both in old and new
-						String con_storagereserved = "SELECT StorageReserved FROM Containers WHERE ContainerId = '"
-								+ scheduled_container_ids.get(i) + "';";
-						ResultSet con_reserved = stmt.executeQuery(con_storagereserved);
-						int container_storagereserved = con_reserved.getInt(1) + spec.ReservedSize - old_spec_reserved;
-
-						String sql_update_rstorage = "UPDATE Containers SET StorageReserved = " + container_storagereserved
-								+ " where ContainerID = '" + scheduled_container_ids.get(i) + "';";
-						stmt.executeUpdate(sql_update_rstorage);
-
-						if (scheduled_container_ids.size() == 1) {
-							sql = "INSERT INTO Relationships VALUES ('" + mkdir_path + "','" + spec.SpecId + "','"
-									+ scheduled_container_ids.get(0) + "'," + 1 + "," + 0 + ");";
-							stmt.executeUpdate(sql);
-						} else {
-							for (int j = 0; j < scheduled_container_ids.size(); j++) {
-								if (j == 0) {
-									sql = "INSERT INTO Relationships VALUES ('" + mkdir_path + "','" + spec.SpecId + "','"
-											+ scheduled_container_ids.get(0) + "'," + 1 + "," + 0 + ");";
-								} else if (j == 1) {
-									sql = "INSERT INTO Relationships VALUES ('" + mkdir_path + "','" + spec.SpecId + "','"
-											+ scheduled_container_ids.get(1) + "'," + 0 + "," + 1 + ");";
-								} else {
-									sql = "INSERT INTO Relationships VALUES ('" + mkdir_path + "','" + spec.SpecId + "','"
-											+ scheduled_container_ids.get(j) + "'," + 0 + "," + 0 + ");";
-								}
-								stmt.executeUpdate(sql);
-							}
-						}
-					} else {
-						// a container only in new: create and file copy
-						String con_storagereserved = "SELECT StorageReserved FROM Containers WHERE ContainerId = '"
-								+ scheduled_container_ids.get(i) + "';";
-						ResultSet con_reserved = stmt.executeQuery(con_storagereserved);
-						int container_storagereserved = con_reserved.getInt(1) + spec.ReservedSize;
-
-						String sql_update_rstorage = "UPDATE Containers SET StorageReserved = " + container_storagereserved
-								+ " where ContainerID = '" + scheduled_container_ids.get(i) + "';";
-						stmt.executeUpdate(sql_update_rstorage);
-
-						if (scheduled_container_ids.size()==1) {
-							sql = "INSERT INTO Relationships VALUES ('" + mkdir_path + "','" + spec.SpecId + "','"
-									+ scheduled_container_ids.get(0) + "'," + 1 + "," + 0 + ");";
-							stmt.executeUpdate(sql);
-						}
-						else{
-							for (int j = 0; j < scheduled_container_ids.size(); j++) {
-								if (j == 0) {
-									sql = "INSERT INTO Relationships VALUES ('" + mkdir_path + "','" + spec.SpecId + "','"
-											+ scheduled_container_ids.get(0) + "'," + 1 + "," + 0 + ");";
-								} else if (j == 1) {
-									sql = "INSERT INTO Relationships VALUES ('" + mkdir_path + "','" + spec.SpecId + "','"
-											+ scheduled_container_ids.get(1) + "'," + 0 + "," + 1 + ");";
-								} else {
-									sql = "INSERT INTO Relationships VALUES ('" + mkdir_path + "','" + spec.SpecId + "','"
-											+ scheduled_container_ids.get(j) + "'," + 0 + "," + 0 + ");";
-								}
-								stmt.executeUpdate(sql);
-							}
-						}
-						System.out.println("(qm) db : File copy for specification " + spec.SpecId + " to " + scheduled_container_ids.get(i));
-					}
-				}
-				for (int i = 0; i <container_ids_old.size(); i++) {
-					if (!scheduled_container_ids.contains(container_ids_old.get(i))) {
-						String con_storagereserved = "SELECT StorageReserved FROM Containers WHERE ContainerId = '"
-								+ container_ids_old.get(i) + "';";
-						ResultSet con_reserved = stmt.executeQuery(con_storagereserved);
-						int container_storagereserved = con_reserved.getInt(1) - old_spec_reserved;
-						String sql_update_rstorage = "UPDATE Containers SET StorageReserved = " + container_storagereserved
-								+ " where ContainerID = '" + container_ids_old.get(i) + "';";
-						stmt.executeUpdate(sql_update_rstorage);
-						System.out.println("(qm) db : Delete strorage of specification " + spec.SpecId + " on " + container_ids_old.get(i));
 					}
 				}
 			}
@@ -1320,7 +1318,6 @@ public class QosManagerTool extends BaseGridTool
 		}
 		return true;
 	}
-
 	/**
 	 * QoS DB: Remove a specification from the DB.
 	 * All relationships related to this spec will be deleted. But the actual
