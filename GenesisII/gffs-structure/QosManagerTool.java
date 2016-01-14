@@ -26,7 +26,9 @@ import java.util.Stack;
 
 import org.apache.axis.message.MessageElement;
 import org.apache.axis.types.URI;
+import org.ggf.rns.LookupResponseType;
 import org.morgan.util.io.StreamUtils;
+import org.oasis_open.docs.wsrf.rl_2.Destroy;
 import org.oasis_open.docs.wsrf.rp_2.GetResourcePropertyDocument;
 import org.oasis_open.docs.wsrf.rp_2.InsertResourceProperties;
 import org.oasis_open.docs.wsrf.rp_2.InsertType;
@@ -51,6 +53,7 @@ import edu.virginia.vcgr.genii.client.naming.ResolverDescription;
 import edu.virginia.vcgr.genii.client.naming.ResolverUtils;
 import edu.virginia.vcgr.genii.client.naming.WSName;
 import edu.virginia.vcgr.genii.client.resource.IResource;
+import edu.virginia.vcgr.genii.client.resource.ResourceException;
 import edu.virginia.vcgr.genii.client.resource.TypeInformation;
 import edu.virginia.vcgr.genii.client.rns.GeniiDirPolicy;
 import edu.virginia.vcgr.genii.client.rns.PathOutcome;
@@ -61,6 +64,7 @@ import edu.virginia.vcgr.genii.client.rns.RNSPathQueryFlags;
 import edu.virginia.vcgr.genii.client.rp.ResourcePropertyException;
 import edu.virginia.vcgr.genii.client.security.axis.AuthZSecurityException;
 import edu.virginia.vcgr.genii.client.security.axis.ResourceSecurityPolicy;
+import edu.virginia.vcgr.genii.client.sync.SyncProperty;
 import edu.virginia.vcgr.genii.common.GeniiCommon;
 import edu.virginia.vcgr.genii.common.rfactory.VcgrCreate;
 import edu.virginia.vcgr.genii.common.rfactory.VcgrCreateResponse;
@@ -90,6 +94,7 @@ public class QosManagerTool extends BaseGridTool
 	private boolean _show_db_verbose = false;
 	private boolean _init_db = false;
 	private boolean _monitor = false;
+	private boolean _clean_replicas = false;
 	private boolean _spec_template = false;
 	private String _status_template = null;
 	private boolean _test = false;
@@ -157,6 +162,12 @@ public class QosManagerTool extends BaseGridTool
 	public void set_monitor()
 	{
 		_monitor = true;
+	}
+
+	@Option({ "clean-replicas" })
+	public void set_clean_replicas()
+	{
+		_clean_replicas = true;
 	}
 
 	@Option({ "spec-template" })
@@ -686,6 +697,13 @@ public class QosManagerTool extends BaseGridTool
 				monitor_all();
 				db_sync_up();
 			}
+		} else if (_clean_replicas) {
+			System.out.println("(qm) main: Cleaning all unused replicas.");
+			succ = db_sync_down();
+			if (succ) {
+				clean_replicas();
+				db_sync_up();
+			}
 		} else if (_spec_template) {
 			QosSpec spec = new QosSpec();
 			System.out.println(spec.to_string());
@@ -833,10 +851,13 @@ public class QosManagerTool extends BaseGridTool
 			stmt.executeUpdate(create_spec_table);
 			stmt.executeUpdate(create_status_table);
 
-			//ReplicaFlag: 1->primary, 0->replica, -1->none
-			//ResolverFlag: 1->resolver 0->not
-			String sql = "CREATE TABLE Relationships(Directory TEXT, SpecId TEXT, ContainerId TEXT, ReplicaFlag INT, ResoverFlag, UNIQUE(Directory, SpecId, ContainerId) ON CONFLICT REPLACE);";
+			// ReplicaFlag: 1 primary, 0 replica, -1 none
+			// ResolverFlag: 1 resolver, 0 not
+			// ReplicaId: non-negative: actual id, negative: (abs - 1) id to remove
+			// ON CONFLICT REPLACE?
+			String sql = "CREATE TABLE Relationships(Directory TEXT, SpecId TEXT, ContainerId TEXT, ReplicaFlag INT, ResoverFlag INT, ReplicaId INT, UNIQUE(Directory, SpecId, ContainerId), UNIQUE(Directory, ReplicaId));";
 			stmt.executeUpdate(sql);
+
 			stmt.close();
 			conn.close();
 			return true;
@@ -930,6 +951,7 @@ public class QosManagerTool extends BaseGridTool
 
 				String h = rsmd_relationship.getColumnName(1) + ", ";
 				h += rsmd_relationship.getColumnName(4) + " ([P]Primary, [R]Replica, [-]None), ";
+				h += rsmd_relationship.getColumnName(6) + ", ";
 				h += rsmd_relationship.getColumnName(5) + " ([R]Resolver, [-]None), ";
 				h += rsmd_relationship.getColumnName(2) + ", ";
 				h += rsmd_relationship.getColumnName(3);
@@ -941,6 +963,7 @@ public class QosManagerTool extends BaseGridTool
 					if (rep == 1) r += "[P]";
 					else if (rep == 0) r += "[R]";
 					else r += "[-]";
+					r += "[" + rs_relationship.getInt(6) + "] ";
 					int res = rs_relationship.getInt(5);
 					if (res == 1) r += "[R]";
 					else r += "[-]";
@@ -981,9 +1004,9 @@ public class QosManagerTool extends BaseGridTool
 				sql = "SELECT * FROM Relationships;";
 				ResultSet rs_relationship = stmt.executeQuery(sql);
 
-				System.out.print("  ** RELATIONSHIPS:\t");
+				System.out.println("  ** RELATIONSHIPS:");
 				while (rs_relationship.next()) {
-					String r = " " + rs_relationship.getString(1) + " ";
+					String r = "   - " + rs_relationship.getString(1) + " ";
 					int rep = rs_relationship.getInt(4);
 					if (rep == 1) r += "[P]";
 					else if (rep == 0) r += "[R]";
@@ -992,10 +1015,9 @@ public class QosManagerTool extends BaseGridTool
 					if (res == 1) r += "[R]";
 					else r += "[-]";
 					r += " (" + rs_relationship.getString(2) + ", "
-							+ rs_relationship.getString(3) + "); ";
-					System.out.print(r);
+							+ rs_relationship.getString(3) + ")";
+					System.out.println(r);
 				}
-				System.out.println("");
 			}
 
 			System.out.println("----------------------------------------");
@@ -1691,6 +1713,10 @@ public class QosManagerTool extends BaseGridTool
 		return container_id;
 	}
 
+	private void db_get_unused_replicas() {
+			return;
+	}
+
 	/**
 	 * QoS DB: Internal function for testing the QoS DB.
 	 * Will not affect the qos.db in grid home directory.
@@ -2153,12 +2179,11 @@ public class QosManagerTool extends BaseGridTool
 			if (succ) {
 				QosSpec spec = new QosSpec();
 				succ = spec.read_from_file(spec_path);
-				if (succ) {
-					db_add_scheduled_directory(mkdir_path, spec, container_ids, true);
-					succ = db_sync_up();
-				}
+				succ = succ && db_add_scheduled_directory(mkdir_path, spec, container_ids, true);
+				succ = succ && db_sync_up();
 			}
 		}
+
 		return succ;
 	}
 
@@ -2355,7 +2380,7 @@ public class QosManagerTool extends BaseGridTool
 	}
 
 	/**************************************************************************
-	 *  Miscellaneous Functions
+	 *  Utility Functions
 	 **************************************************************************/
 
 	/**
@@ -2411,6 +2436,15 @@ public class QosManagerTool extends BaseGridTool
 		status.RnsPath = "grid:" + rns.lookupRNS();
 		return status;
 	}
+
+	private boolean clean_replicas() {
+		System.out.println("(qm) Warning: Cleaning all unused replicas.");
+		return false;
+	}
+
+	/**************************************************************************
+	 *  Miscellaneous Functions
+	 **************************************************************************/
 
 	/**
 	 * A replicate function copied from ReplicateTool.java.
@@ -2591,5 +2625,105 @@ public class QosManagerTool extends BaseGridTool
 				stack.push(child);
 			}
 		}
+	}
+
+	/**
+	 * A resolver function copied from ResolverTool.java.
+	 * The same as running: resolver -d <source-path> <replicant-number>
+	 */
+	private int destroyReplica(String replicaPath, int replicaNum)
+			throws RNSException, AuthZSecurityException, ResourceException, ToolException
+	{
+		Boolean sameEPR = false;
+		RNSPath current = RNSPath.getCurrent();
+		RNSPath replicaRNS = current.lookup(replicaPath, RNSPathQueryFlags.MUST_EXIST);
+		EndpointReferenceType replicaEPR = replicaRNS.getEndpoint();
+		// Now get the replica vector of replica numbers
+		int[] list = null;
+		// First get the vector or replica numbers
+		list = ResolverUtils.getEndpoints(replicaEPR);
+		// If there is only one copy, don't allow replica remove
+		if (list.length == 1) {
+			stdout.println("Only one copy of " + replicaPath + ". Use rm to delete it.");
+			return 1;
+		}
+		// Now look them all up and get their EPRs
+		LookupResponseType dir = ResolverUtils.getEndpointEntries(replicaEPR);
+		if (dir != null && list != null) {
+			// Now find the replica
+			int index = -1;
+			for (int j = 0; j < list.length; j++) {
+				if (list[j] == replicaNum) {
+					index = j;
+					break;
+				}
+			}
+			if (index >= 0) {
+				/*
+				 * stdout.println(":replicaEPR data:\n" + replicaEPR.getAddress().toString()+"\n" +
+				 * replicaEPR.getReferenceParameters().get_any()[0].toString()); stdout.println(":selected entry data:\n" +
+				 * dir.getEntryResponse(index).getEndpoint().getAddress().toString()+"\n" + dir.getEntryResponse
+				 * (index).getEndpoint().getReferenceParameters().get_any()[0].toString());
+				 */
+				// To determine if the two replica instances are the same we check if their
+				// container address and resource key are the same.
+				// The EPR equals operator does not do it correctly.
+				sameEPR =
+					replicaEPR.getAddress().toString().compareTo(dir.getEntryResponse(index).getEndpoint().getAddress().toString()) == 0
+						&& replicaEPR.getReferenceParameters().get_any()[0].toString().compareTo(
+							dir.getEntryResponse(index).getEndpoint().getReferenceParameters().get_any()[0].toString()) == 0;
+
+				if (sameEPR) {
+					// 2014-10-04 ASG. I had code to pick a different EPR, but the list of EPR's I
+					// got back did not have resolvers embedded in them.
+					// So instead i am going to call ResolverUtils.resolve(EPR) and let the server
+					// pick one for me because it will properly embed
+					// the resolver info in the EPR. I could alternatively, construct my own using
+					// some notion of closeness, but i will not.
+					// We must consider what might happen if the operation fails in the middle. If
+					// we simply unlink the old and link in the new,
+					// if a failure occurs after unlinking, and before linking, we could loose the
+					// reference to the resource. Soooo, instead we
+					// fist create a new link with the old, soon-to-be-removed-epr, then unlink,
+					// link the new, unlink the old.
+					RNSPath tempLink = current.lookup(replicaPath + "-warning-removal-replica-failed", RNSPathQueryFlags.MUST_NOT_EXIST);
+					try {
+						EndpointReferenceType replacementEPR = ResolverUtils.resolve(replicaEPR);
+						tempLink.link(replicaEPR); // We will unlink this in just a moment, just
+													// don't want to loose it.
+						replicaRNS.unlink(); // unlink the old entry
+						replicaRNS.link(replacementEPR);// link in the new
+						// now when we destroy the replicaEPR we will not be removing the copy
+						// pointed to by the directory entry
+						// Next we unlink the temporary link
+						tempLink.unlink();
+					} catch (Throwable e) {
+						stdout.println("Failed to get a new resolution EPR, this should NEVER happen.");
+						throw new ToolException("Failure removing replicant: " + e.getLocalizedMessage(), e);
+					}
+				} else
+					replicaEPR = dir.getEntryResponse(index).getEndpoint();
+			} else {
+				stdout.println(replicaNum + " is out of range");
+				return 1;
+			}
+		} else {
+			stdout.println("There are no replicas of " + replicaPath);
+			return 1;
+		}
+		// Now destroy the replicant
+		MessageElement[] elementArr = new MessageElement[1];
+		elementArr[0] = new MessageElement(SyncProperty.UNLINKED_REPLICA_QNAME, "true");
+		UpdateType update = new UpdateType(elementArr);
+		UpdateResourceProperties request = new UpdateResourceProperties(update);
+
+		try {
+			GeniiCommon common = ClientUtils.createProxy(GeniiCommon.class, replicaEPR);
+			common.updateResourceProperties(request);
+			common.destroy(new Destroy());
+		} catch (Throwable e) {
+			throw new ToolException("Could no destroy the replicant: " + e.getLocalizedMessage(), e);
+		}
+		return 0;
 	}
 }

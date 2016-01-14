@@ -22,6 +22,10 @@ The following options are available:
 --monitor
     Monitor all QoS specifications in the QoS database, and reschedule the
     unsatisfied ones.
+-- clean-replicas
+    Cleaning all unused replicas. Users should make sure that file-copy
+    operations are done. Otherwise when all source replicas are removed,
+    there may be data loss risks.
 --status-template=<rns-service-path>
     Generate a template of a container status file for a RNS service path.
 --spec-template

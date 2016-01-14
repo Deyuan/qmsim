@@ -241,7 +241,8 @@ public class MkdirTool extends BaseGridTool
 					System.out.println("(mkdir) qm: Successfully create dynamically scheduled folder: " +  pathsToCreate.get(0));
 				} else {
 					System.out.println("(mkdir) qm: Fail to create folder: " +  pathsToCreate.get(0));
-					// TODO: remove replicates, remove folder
+					RmdirTool.removeDirectory(pathsToCreate, stderr);
+					return -1;
 				}
 			}
 		}
