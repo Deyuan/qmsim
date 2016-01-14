@@ -1368,14 +1368,11 @@ public class QosManagerTool extends BaseGridTool
 			Class.forName("org.sqlite.JDBC");
 			conn = DriverManager.getConnection("jdbc:sqlite:" + db_get_local_path());
 			stmt = conn.createStatement();
-
 			List<String> spec_ids = db_rel_query(RelQuery.SPECS_RELATED_TO_DIR, dir);
 			assert(spec_ids.size() == 1); // a directory should be only related to one spec
-
 			String sql = "SELECT ReservedSize FROM Specifications WHERE SpecId = '" + spec_ids.get(0) + "';";
 			ResultSet rs = stmt.executeQuery(sql);
 			int spec_reserved = rs.getInt(1);
-
 			List<String> container_ids = db_rel_query(RelQuery.CONTAINERS_RELATED_TO_DIR, dir);
 			for (int i = 0; i < container_ids.size(); i++) {
 				sql = "SELECT StorageReserved FROM Containers WHERE ContainerId = '" + container_ids.get(i) + "';";
