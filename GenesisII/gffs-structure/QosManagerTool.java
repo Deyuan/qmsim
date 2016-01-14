@@ -609,7 +609,7 @@ public class QosManagerTool extends BaseGridTool
 						if (status_db == null) {
 							db_update_container(status, true); // init
 						} else {
-							db_update_container(status, false); // init
+							db_update_container(status, false); // update
 						}
 						// TODO: need to monitor?
 						//monitor_specs_on_container(status.ContainerId);
@@ -631,7 +631,7 @@ public class QosManagerTool extends BaseGridTool
 					status.ContainerAvailability = 0;
 					db_update_container(status, false);
 					// Reschedule
-					succ = monitor_specs_on_container(_container_id_to_remove);
+					succ = monitor_container(_container_id_to_remove);
 					if (succ) {
 						// Remove container
 						db_remove_container(_container_id_to_remove);
@@ -1046,6 +1046,57 @@ public class QosManagerTool extends BaseGridTool
 		return true;
 	}
 
+
+	/**
+	 * QoS DB: Update a spec in DB.
+	 * Caller should be responsible for updating the reserved size for all
+	 * related containers.
+	 * @param status
+	 * @param init
+	 * @return
+	 */
+	private boolean db_update_spec(QosSpec spec, boolean init) {
+		assert (spec != null);
+		Connection conn = null;
+		Statement stmt = null;
+		try {
+			Class.forName("org.sqlite.JDBC");
+			conn = DriverManager.getConnection("jdbc:sqlite:" + db_get_local_path());
+			stmt = conn.createStatement();
+
+			String sql = "SELECT * FROM Specifications WHERE SpecId = '" + spec.SpecId + "';";
+			ResultSet rs = stmt.executeQuery(sql);
+
+			if (rs.next()) { // exist
+				if (init) { // error
+					System.out.println("(qm) db: Error: Spec: " + spec.SpecId + " already exists.");
+					return false;
+				} else { // update
+					System.out.println("(qm) db: Update spec: " + spec.SpecId);
+					sql = "DELETE FROM Specifications WHERE SpecId = '" + spec.SpecId + "';";
+					stmt.executeUpdate(sql);
+					sql = "INSERT INTO Specifications VALUES (" + spec.to_sql_string() + ");";
+					stmt.executeUpdate(sql);
+				}
+			} else { // not exist
+				if (init) { // insert
+					System.out.println("(qm) db: Insert a new spec: " + spec.SpecId);
+					sql = "INSERT INTO Specifications VALUES (" + spec.to_sql_string() + ");";
+					stmt.executeUpdate(sql);
+				} else { // error
+					System.out.println("(qm) db: Error: Cannot update a not exist spec.");
+					return false;
+				}
+			}
+			stmt.close();
+			conn.close();
+		} catch (Exception e) {
+			System.out.println(e.getClass().getName() + ": " + e.getMessage());
+			return false;
+		}
+		return true;
+	}
+
 	/**
 	 * QoS DB: Add a scheduled directory into the DB.
 	 * @param mkdir_path
@@ -1108,7 +1159,7 @@ public class QosManagerTool extends BaseGridTool
 			} else {
 				// Update existing spec
 				List<String> container_ids_old = new ArrayList<String>();
-				container_ids_old = db_get_container_ids_for_spec(spec.SpecId);
+				container_ids_old = db_rel_query(RelQuery.CONTAINERS_RELATED_TO_SPEC, spec.SpecId);
 
 				System.out.println("(qm) db: Update scheduled spec: " + spec.SpecId);
 
@@ -1321,45 +1372,29 @@ public class QosManagerTool extends BaseGridTool
 	}
 
 	/**
-	 * QoS DB: Given a specification, get all related container IDs.
-	 * @param spec_id
-	 * @return
+	 * QoS DB: Relationship query types
+	 * Relationships:
+	 * A Specification (can be used for creating) multiple Directories
+	 * A Directory (can be replicated on) multiple Containers
 	 */
-	private List<String> db_get_container_ids_for_spec(String spec_id) {
-		assert(spec_id != null);
-		System.out.println("(qm) db: Get container ids for specification: " + spec_id);
-		Set<String> container_ids = new HashSet<String>();
-		Connection conn = null;
-		Statement stmt = null;
-
-		try {
-			Class.forName("org.sqlite.JDBC");
-			conn = DriverManager.getConnection("jdbc:sqlite:" + db_get_local_path());
-			stmt = conn.createStatement();
-
-			String sql = "SELECT ContainerId FROM Relationships WHERE SpecId = '" + spec_id + "';";
-			ResultSet rs = stmt.executeQuery(sql);
-			while (rs.next()) {
-				container_ids.add(rs.getString(1));
-			}
-			stmt.close();
-			conn.close();
-		} catch (Exception e) {
-			System.out.println(e.getClass().getName() + ": " + e.getMessage());
-			container_ids.clear();
-		}
-		return new ArrayList<String>(container_ids);
+	public enum RelQuery {
+		SPECS_RELATED_TO_DIR,
+		SPECS_RELATED_TO_CONTAINER,
+		DIRS_RELATED_TO_SPEC,
+		DIRS_RELATED_TO_CONTAINER,
+		CONTAINERS_RELATED_TO_SPEC,
+		CONTAINERS_RELATED_TO_DIR
 	}
 
 	/**
-	 * QoS DB: Given a specification, get all directories that use this spec.
-	 * @param spec_id
-	 * @return
+	 * QoS DB: Query a relationship.
+	 * @param q
+	 * @param id
+	 * @return a list of strings
 	 */
-	private List<String> db_get_dirs_for_spec(String spec_id) {
-		assert(spec_id != null);
-		System.out.println("(qm) db: Get directories for specification: " + spec_id);
-		Set<String> dirs = new HashSet<String>();
+	private List<String> db_rel_query(RelQuery q, String id) {
+		assert(q != null && id != null);
+		Set<String> results = new HashSet<String>();
 		Connection conn = null;
 		Statement stmt = null;
 
@@ -1368,49 +1403,33 @@ public class QosManagerTool extends BaseGridTool
 			conn = DriverManager.getConnection("jdbc:sqlite:" + db_get_local_path());
 			stmt = conn.createStatement();
 
-			String sql = "SELECT Directory FROM Relationships WHERE SpecId = '" + spec_id + "';";
+			String sql = null;
+			if (q == RelQuery.SPECS_RELATED_TO_DIR) {
+				sql = "SELECT SpecId FROM Relationships WHERE Directory =";
+			} else if (q == RelQuery.SPECS_RELATED_TO_CONTAINER) {
+				sql = "SELECT SpecId FROM Relationships WHERE ContainerId =";
+			} else if (q == RelQuery.DIRS_RELATED_TO_SPEC) {
+				sql = "SELECT Directory FROM Relationships WHERE SpecId =";
+			} else if (q == RelQuery.DIRS_RELATED_TO_CONTAINER) {
+				sql = "SELECT Directory FROM Relationships WHERE ContainerId =";
+			} else if (q == RelQuery.CONTAINERS_RELATED_TO_SPEC) {
+				sql = "SELECT ContainerId FROM Relationships WHERE SpecId =";
+			} else if (q == RelQuery.CONTAINERS_RELATED_TO_DIR) {
+				sql = "SELECT ContainerId FROM Relationships WHERE Directory =";
+			}
+			sql += " '" + id + "';";
 			ResultSet rs = stmt.executeQuery(sql);
 			while (rs.next()) {
-				dirs.add(rs.getString(1));
+				results.add(rs.getString(1));
 			}
 			stmt.close();
 			conn.close();
 		} catch (Exception e) {
 			System.out.println(e.getClass().getName() + ": " + e.getMessage());
-			dirs.clear();
+			results.clear();
 		}
-		return new ArrayList<String>(dirs);
-	}
 
-	/**
-	 * QoS DB: Given a container, get all related specs IDs.
-	 * @param container_id
-	 * @return
-	 */
-	private List<String> db_get_spec_ids_on_container(String container_id) {
-		assert(container_id != null);
-		System.out.println("(qm) db: Get spec ids on container: " + container_id);
-		Set<String> spec_ids = new HashSet<String>();
-		Connection conn = null;
-		Statement stmt = null;
-
-		try {
-			Class.forName("org.sqlite.JDBC");
-			conn = DriverManager.getConnection("jdbc:sqlite:" + db_get_local_path());
-			stmt = conn.createStatement();
-
-			String sql = "SELECT SpecId FROM Relationships WHERE ContainerId = '" + container_id + "';";
-			ResultSet rs = stmt.executeQuery(sql);
-			while (rs.next()) {
-				spec_ids.add(rs.getString(1));
-			}
-			stmt.close();
-			conn.close();
-		} catch (Exception e) {
-			System.out.println(e.getClass().getName() + ": " + e.getMessage());
-			spec_ids.clear();
-		}
-		return new ArrayList<String>(spec_ids);
+		return new ArrayList<String>(results);
 	}
 
 	/**
@@ -1675,8 +1694,12 @@ public class QosManagerTool extends BaseGridTool
 		db_summary(true);
 
 		System.out.println("#### DB Test 9: Get information from db");
-		System.out.println(db_get_container_ids_for_spec("client1-spec1").toString());
-		System.out.println(db_get_spec_ids_on_container("container1").toString());
+		System.out.println(db_rel_query(RelQuery.CONTAINERS_RELATED_TO_SPEC, "client1-spec1").toString());
+		System.out.println(db_rel_query(RelQuery.SPECS_RELATED_TO_CONTAINER, "container1").toString());
+		System.out.println(db_rel_query(RelQuery.CONTAINERS_RELATED_TO_DIR, "bck").toString());
+		System.out.println(db_rel_query(RelQuery.SPECS_RELATED_TO_DIR, "bck").toString());
+		System.out.println(db_rel_query(RelQuery.DIRS_RELATED_TO_SPEC, "client1-spec1").toString());
+		System.out.println(db_rel_query(RelQuery.DIRS_RELATED_TO_CONTAINER, "container1").toString());
 		System.out.println(db_get_container_id_list().toString());
 		System.out.println(db_get_spec_id_list().toString());
 		status = db_get_status("xxx");
@@ -2121,8 +2144,8 @@ public class QosManagerTool extends BaseGridTool
 	 * @param spec_id
 	 * @return
 	 */
-	private boolean monitor_spec(String spec_id) {
-		List<String> container_ids = db_get_container_ids_for_spec(spec_id);
+	private boolean _monitor_spec(String spec_id) {
+		List<String> container_ids = db_rel_query(RelQuery.CONTAINERS_RELATED_TO_SPEC, spec_id);
 		QosSpec spec = db_get_spec(spec_id);
 		List<ContainerStatus> status_list = new ArrayList<ContainerStatus>();
 		for (int i = 0; i < container_ids.size(); i++) {
@@ -2141,25 +2164,68 @@ public class QosManagerTool extends BaseGridTool
 	}
 
 	/**
-	 * QoS Monitor: Monitor qos specs related to a container
+	 * QoS Monitor: Monitor if a directory's spec is satisfied.
+	 * @param dir
+	 * @return
+	 */
+	private boolean monitor_directory(String dir) {
+		return false;
+	}
+
+	/**
+	 * QoS Monitor: Monitor if everything related to a container is satisfied.
+	 * Note: This function will not update the container status, because we
+	 * may temporarily set the availability to 0 before removing the container.
+	 * @param dir
+	 * @return
+	 */
+	private boolean monitor_container(String container_id) {
+		assert(container_id != null);
+		ContainerStatus status = db_get_status(container_id);
+		return false;
+	}
+
+	/**
+	 * QoS Monitor: Update specs to qos database.
+	 * If reserved size is changed, all related containers are updated.
 	 * @param container_id
 	 * @return
 	 */
-	private boolean monitor_specs_on_container(String container_id) {
-		List<String> spec_ids = db_get_spec_ids_on_container(container_id);
-		for (int i = 0; i < spec_ids.size(); i++) {
-			monitor_spec(spec_ids.get(i));
+	private boolean update_spec(String spec_id) {
+		assert(spec_id != null);
+		QosSpec spec_in_db = db_get_spec(spec_id);
+		assert(spec_in_db != null);
+		QosSpec spec_remote = new QosSpec();
+		boolean succ = spec_remote.read_from_file(spec_in_db.SpecPath);
+		if (!succ) {
+			System.out.println("(qm) monitor: Warning: Cannot access the spec file of " + spec_id);
+		} else {
+			// NOTE: allow users to change the spec ID?
+			assert(spec_remote.SpecId.equals(spec_in_db.SpecId));
+			if (spec_remote.ReservedSize != spec_in_db.ReservedSize) {
+				// Update reserved size of all related containers
+				List<String> dirs = db_rel_query(RelQuery.DIRS_RELATED_TO_SPEC, spec_id);
+				for (int i = 0; i < dirs.size(); i++) {
+					List<String> container_ids = db_rel_query(RelQuery.CONTAINERS_RELATED_TO_DIR, dirs.get(i));
+					ContainerStatus status = db_get_status(container_ids.get(i));
+					status.StorageReserved -= spec_in_db.ReservedSize;
+					status.StorageReserved += spec_remote.ReservedSize;
+					db_update_container(status, false); // update
+				}
+			}
+			db_update_spec(spec_remote, false); // update
 		}
 		return true;
 	}
 
 	/**
 	 * QoS Monitor: Update status of a container to qos database.
-	 * Will not do scheduling here.
+	 * This function will set the availability for further scheduling.
 	 * @param container_id
 	 * @return
 	 */
-	private boolean monitor_container(String container_id) {
+	private boolean update_container(String container_id) {
+		assert(container_id != null);
 		ContainerStatus status_in_db = db_get_status(container_id);
 		assert(status_in_db != null);
 		ContainerStatus status_remote = new ContainerStatus();
@@ -2194,12 +2260,17 @@ public class QosManagerTool extends BaseGridTool
 		// Step 1: update all containers
 		List<String> container_ids = db_get_container_id_list();
 		for (int i = 0; i < container_ids.size(); i++) {
-			monitor_container(container_ids.get(i));
+			update_container(container_ids.get(i));
 		}
-		// Step 2: monitor all specs
+		// Step 2: update all specs
 		List<String> spec_ids = db_get_spec_id_list();
 		for (int i = 0; i < spec_ids.size(); i++) {
-			monitor_spec(spec_ids.get(i));
+			update_spec(spec_ids.get(i));
+		}
+		// Step 3: monitor all directories
+		List<String> dirs = db_get_dir_list();
+		for (int i = 0; i < dirs.size(); i++) {
+			monitor_directory(spec_ids.get(i));
 		}
 		return true;
 	}
