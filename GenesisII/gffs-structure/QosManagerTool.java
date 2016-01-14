@@ -83,6 +83,7 @@ public class QosManagerTool extends BaseGridTool
 
 	private String _spec_id_to_schedule = null;
 	private String _spec_id_to_remove = null;
+	private String _directory_to_remove = null;
 	private String _status_path_to_add = null;
 	private String _container_id_to_remove = null;
 	private boolean _show_db = false;
@@ -114,6 +115,12 @@ public class QosManagerTool extends BaseGridTool
 	public void set_rm_spec(String spec_id)
 	{
 		_spec_id_to_remove = spec_id;
+	}
+
+	@Option({ "rm-directory" })
+	public void set_rm_directory(String directory)
+	{
+		_directory_to_remove = directory;
 	}
 
 	@Option({ "add-container" })
@@ -594,6 +601,14 @@ public class QosManagerTool extends BaseGridTool
 			succ = db_sync_down();
 			if (succ) {
 				db_remove_spec(_spec_id_to_remove);
+				db_sync_up();
+			}
+		} else if (_directory_to_remove != null) {
+			System.out.println("(qm) main: Remove a directory "
+					+ _directory_to_remove);
+			succ = db_sync_down();
+			if (succ) {
+				db_remove_directory(_directory_to_remove);
 				db_sync_up();
 			}
 		} else if (_status_path_to_add != null) {
@@ -1133,6 +1148,14 @@ public class QosManagerTool extends BaseGridTool
 					sql = "INSERT INTO Relationships VALUES ('" + mkdir_path + "','" + spec.SpecId + "','"
 							+ scheduled_container_ids.get(0) + "'," + 1 + "," + 0 + ");";
 					stmt.executeUpdate(sql);
+					String con_storagereserved = "SELECT StorageReserved FROM Containers WHERE ContainerId = '"
+							+ scheduled_container_ids.get(0) + "';";
+					ResultSet con_reserved = stmt.executeQuery(con_storagereserved);
+					int container_storagereserved = con_reserved.getInt(1) + spec.ReservedSize;
+
+					String sql_update_rstorage = "UPDATE Containers SET StorageReserved = " + container_storagereserved
+							+ " where ContainerID = '" + scheduled_container_ids.get(0) + "';";
+					stmt.executeUpdate(sql_update_rstorage);
 				} else {
 					for (int i = 0; i < scheduled_container_ids.size(); i++) {
 						if (i == 0) {
@@ -1221,7 +1244,6 @@ public class QosManagerTool extends BaseGridTool
 							}
 						}
 					} else {
-						System.out.println("$$$$$$$$$$$$$$$$$$$$$$$");
 						// a container only in new: create and file copy
 						String con_storagereserved = "SELECT StorageReserved FROM Containers WHERE ContainerId = '"
 								+ scheduled_container_ids.get(i) + "';";
@@ -1327,7 +1349,66 @@ public class QosManagerTool extends BaseGridTool
 		}
 		return true;
 	}
+	/**
+	 * QoS DB: Remove a directory from the DB.
+	 * All relationships related to this directory will be deleted. But the actual
+	 * directories will not be deleted.
+	 * @param directroy_name
+	 * @return
+	 */
+	private boolean db_remove_directory(String directory_name) {
+		assert(directory_name != null);
+		System.out.println("(qm) db: Remove directory: " + directory_name);
+		Set<String> spec_ids = new HashSet<String>();
+		Connection conn = null;
+		Statement stmt = null;
 
+		try {
+			Class.forName("org.sqlite.JDBC");
+			conn = DriverManager.getConnection("jdbc:sqlite:" + db_get_local_path());
+			stmt = conn.createStatement();
+
+			String sql_get_specid = "SELECT SpecId FROM Relationships WHERE Directory = '" + directory_name + "';";
+			ResultSet rs = stmt.executeQuery(sql_get_specid);
+			while (rs.next()) {
+				spec_ids.add(rs.getString(1));
+			}
+			ArrayList<String> spec_ids_nodup = new ArrayList<String>(spec_ids);
+
+			//for ( int i=0; i < spec_ids_nodup.size(); i++) {
+			String sql = "SELECT ReservedSize FROM Specifications WHERE SpecId = '" + spec_ids_nodup.get(0) + "';";
+			rs = stmt.executeQuery(sql);
+			int spec_reserved = rs.getInt(1);
+
+			sql = "SELECT ContainerId FROM Relationships WHERE Directory = '" + directory_name + "';";
+			ResultSet rs_con = stmt.executeQuery(sql);
+			//ResultSetMetaData rsmd_con = rs_con.getMetaData();
+
+			while (rs_con.next()) {
+				String container_id = rs_con.getString(1);
+				System.out.println(container_id);
+				sql = "SELECT StorageReserved FROM Containers WHERE ContainerId = '" + container_id + "';";
+				ResultSet rs_reserved = stmt.executeQuery(sql);
+				int storage_reserved = rs_reserved.getInt(1);
+				storage_reserved -= spec_reserved;
+				System.out.println("####################");
+				System.out.print(storage_reserved);
+				sql = "UPDATE Containers SET StorageReserved = " + storage_reserved
+							+ " WHERE ContainerId =" + "'" + container_id +"';";
+				stmt.executeUpdate(sql);
+			}
+
+			sql = "DELETE FROM Relationships WHERE Directory = '" + directory_name + "';";
+			stmt.executeUpdate(sql);
+			//}
+		stmt.close();
+		conn.close();
+		} catch (Exception e) {
+			System.out.println(e.getClass().getName() + ": " + e.getMessage());
+			return false;
+		}
+		return true;
+	}
 	/**
 	 * QoS DB: Remove a container from the DB. There should be no directories
 	 * scheduled on this container.
@@ -1670,6 +1751,10 @@ public class QosManagerTool extends BaseGridTool
 		container_list.add("container1");
 		container_list.add("container2");
 		db_add_scheduled_directory("bck", spec, container_list, false);
+		db_summary(true);
+
+		System.out.println("#### DB Test 5+: Remove Directory");
+		db_remove_directory("grid:/home/xcg.virginia.edu/cb2yy/qmsim/bck");
 		db_summary(true);
 
 		System.out.println("#### DB Test 6: Update a scheduled spec");
