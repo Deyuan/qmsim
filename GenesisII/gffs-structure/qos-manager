@@ -14,9 +14,12 @@ The following options are available:
 --reschedule=<qos-spec-id>
     Given a QoS specification id, reschedule its containers.
 --rm-spec=<qos-spec-id>
-    Remove a Qos specification from the QoS database.
+    Remove a QoS specification from the QoS database. The records of all
+    directories that are created based on this specification will be
+    removed from the QoS DB, but actual directories will not be removed.
 --rm-directory=<direcotry-path>
-	Delete the directory from the QoS database
+    Delete a directory from the QoS database. The actual directory will not
+    be removed.
 --add-container=<container-status-path>
     Add a new container to the QoS database.
 --rm-container=<container-id>
