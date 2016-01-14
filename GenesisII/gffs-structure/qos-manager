@@ -11,8 +11,6 @@ The following options are available:
     Show summary of the QoS database.
 --show-db-verbose
     Show details of the QoS database.
---reschedule=<qos-spec-id>
-    Given a QoS specification id, reschedule its containers.
 --rm-spec=<qos-spec-id>
     Remove a QoS specification from the QoS database. The records of all
     directories that are created based on this specification will be
@@ -27,7 +25,7 @@ The following options are available:
 --monitor
     Monitor all QoS specifications in the QoS database, and reschedule the
     unsatisfied ones.
--- clean-replicas
+--clean-replicas
     Cleaning all unused replicas. Users should make sure that file-copy
     operations are done. Otherwise when all source replicas are removed,
     there may be data loss risks.

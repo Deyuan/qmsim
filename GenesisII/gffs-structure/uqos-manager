@@ -1,7 +1,6 @@
 qos-manager [--init-db]
             [--show-db]
             [--show-db-verbose]
-            [--reschedule=<qos-spec-id>]
             [--rm-spec=<qos-spec-id>]
             [--rm-directory=<direcotry-path>]
             [--add-container=<container-status-path>]
