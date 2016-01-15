@@ -11,6 +11,11 @@ The following options are available:
     Show summary of the QoS database.
 --show-db-verbose
     Show details of the QoS database.
+--add-container=<container-status-path>
+    Add a new container to the QoS database.
+--rm-container=<container-id>
+    Remove a container from the QoS database. All directories that are related
+    to this container will be rescheduled.
 --rm-spec=<qos-spec-id>
     Remove a QoS specification from the QoS database. The records of all
     directories that are created based on this specification will be
@@ -18,13 +23,9 @@ The following options are available:
 --rm-directory=<direcotry-path>
     Delete a directory from the QoS database. The actual directory will not
     be removed.
---add-container=<container-status-path>
-    Add a new container to the QoS database.
---rm-container=<container-id>
-    Remove a container from the QoS database.
 --monitor
-    Monitor all QoS specifications in the QoS database, and reschedule
-    unsatisfied ones.
+    Monitor all directories in the QoS database, and reschedule unsatisfied
+    ones.
 --clean-replicas
     Cleaning all unused replicas. Users should make sure that file-copy
     operations are done. Otherwise when all source replicas are removed,

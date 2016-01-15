@@ -1142,30 +1142,36 @@ public class QosManagerTool extends BaseGridTool
 
 		GeniiPath dir = new GeniiPath(mkdir_path);
 		mkdir_path = "grid:" + dir.lookupRNS();
+		System.out.println("(qm) db: Add scheduled directory: " + mkdir_path +
+				" (" + spec.SpecId + ", " + scheduled_container_ids.toString() + ")");
 
 		try {
 			Class.forName("org.sqlite.JDBC");
 			conn = DriverManager.getConnection("jdbc:sqlite:" + db_get_local_path());
 			stmt = conn.createStatement();
 
-			List<String> container_ids_old = new ArrayList<String>();
-			container_ids_old = db_rel_query(RelQuery.CONTAINERS_RELATED_TO_DIR, mkdir_path);
-			//check if directory exists
-			String sql = "SELECT * FROM Relationships WHERE Directory = '" + mkdir_path + "';";
-			ResultSet rs = stmt.executeQuery(sql);
-			if (rs.next()) {
-				if (init==true) {
-					System.out.println("(qm) db: Error: directory should not exist if it is created for the first time");
-				}
-				else {
+			List<String> container_ids_old = db_rel_query(RelQuery.CONTAINERS_RELATED_TO_DIR, mkdir_path);
+			if (container_ids_old.size() > 0) { // if directory exists in db
+				if (init == true) { // init
+					System.out.println("(qm) db: Error: directory should not exist if it is created for the first time.");
+					return false;
+				} else { // update
 					//check if spec exists
-					sql = "SELECT * FROM Specifications WHERE SpecId = '" + spec.SpecId + "';";
-					rs = stmt.executeQuery(sql);
-					if (rs.next()) {
+					String sql = "SELECT * FROM Specifications WHERE SpecId = '" + spec.SpecId + "';";
+					ResultSet rs = stmt.executeQuery(sql);
+					if (rs.next()) { // if spec exists in db
 						String old_spec = "SELECT ReservedSize FROM Specifications WHERE SpecId = '"
 								+ spec.SpecId + "';";
 						ResultSet old_reserved = stmt.executeQuery(old_spec);
 						int old_spec_reserved = old_reserved.getInt(1);
+
+						sql = "SELECT ContainerId FROM Relationships WHERE Directory = '" + mkdir_path + "' AND ResolverFlag = 1;";
+						rs = stmt.executeQuery(sql);
+						String resolver_id = null;
+						if (rs.next()) {
+							resolver_id = rs.getString(1);
+						}
+
 						for (int i = 0; i < scheduled_container_ids.size(); i++) {
 							if (container_ids_old.contains(scheduled_container_ids.get(i))) {
 								// a container both in old and new
@@ -1180,31 +1186,28 @@ public class QosManagerTool extends BaseGridTool
 
 								String sql_replicaid = "SELECT ReplicaId FROM Relationships WHERE ContainerId = '"
 										+ scheduled_container_ids.get(i) + "' AND " + "Directory = '" + mkdir_path + "';";
-								System.out.println(sql_replicaid);
 								ResultSet rs_old_replicaid = stmt.executeQuery(sql_replicaid);
 								int replicaid = rs_old_replicaid.getInt(1);
-								//update relationships and set replicaID, replicaflag and resolverflag
-								if (scheduled_container_ids.size() == 1) {
-									sql = "UPDATE Relationships SET ReplicaFlag = 1, ResolverFlag = 0, ReplicaID = " + i
-											+ " Where Directory = '" + mkdir_path + "' AND ContainerId = '" + scheduled_container_ids.get(0) + "';";
-									System.out.println(sql);
-									stmt.executeUpdate(sql);
-								} else {
-									if (i == 0) {
-										sql = "UPDATE Relationships SET ReplicaFlag = 1, ResolverFlag = 0, ReplicaID = " + i
-												+ " Where Directory = '" + mkdir_path + "' AND ContainerId = '" + scheduled_container_ids.get(0) + "';";
-										System.out.println(sql);
-									} else if (i == 1) {
-										sql = "UPDATE Relationships SET ReplicaFlag = 0, ResolverFlag = 1, ReplicaID = " + i
-												+ " Where Directory = '" + mkdir_path + "' AND ContainerId = '" + scheduled_container_ids.get(i) + "';";
-										System.out.println(sql);
-									} else {
-										sql = "UPDATE Relationships SET ReplicaFlag = 0, ResolverFlag = 0, ReplicaID = " + i
-												+ " Where Directory = '" + mkdir_path + "' AND ContainerId = '" + scheduled_container_ids.get(i) + "';";
-										System.out.println(sql);
+
+								// Update Relationships and set ReplicaId, ReplicaFlag and ResolverFlag
+								int ReplicaFlag = (i == 0 ? 1 : 0);
+								int ResolverFlag = 0; // determine which container is the resolver
+								if (resolver_id == null) {
+									if (scheduled_container_ids.size() > 1 && i == 1) {
+										ResolverFlag = 1;
 									}
-									stmt.executeUpdate(sql);
+								} else {
+									if (scheduled_container_ids.get(i).equals(resolver_id)) {
+										ResolverFlag = 1;
+									}
 								}
+								int ReplicaId = replicaid;
+								sql = "UPDATE Relationships SET ReplicaFlag = " + ReplicaFlag
+										+ ", ResolverFlag = " + ResolverFlag
+										+ ", ReplicaId = " + ReplicaId
+										+ " Where Directory = '" + mkdir_path
+										+ "' AND ContainerId = '" + scheduled_container_ids.get(i) + "';";
+								stmt.executeUpdate(sql);
 							} else {
 								// a container only in new: create and file copy
 								String con_storagereserved = "SELECT StorageReserved FROM Containers WHERE ContainerId = '"
@@ -1214,65 +1217,75 @@ public class QosManagerTool extends BaseGridTool
 								String sql_update_rstorage = "UPDATE Containers SET StorageReserved = " + container_storagereserved
 										+ " where ContainerID = '" + scheduled_container_ids.get(i) + "';";
 								stmt.executeUpdate(sql_update_rstorage);
-								String sql_replicaid = "SELECT MAX(ReplicaId) FROM Relationships WHERE Directory = '"
-										+ mkdir_path + "';";
-								ResultSet rs_old_replicaid = stmt.executeQuery(sql_replicaid);
-								int replicaid = rs_old_replicaid.getInt(1);
-								//insert to relationships and set replicaID, replicaflag and resolverflag
-								if (scheduled_container_ids.size() == 1) {
-									sql = "INSERT INTO Relationships VALUES ('" + mkdir_path + "','" + spec.SpecId + "', '" +scheduled_container_ids.get(0)+ "' ,"
-											+ 1 + "," + 0 + "," + i + ");";
-									stmt.executeUpdate(sql);
-								} else {
-									if (i == 0) {
-										sql = "INSERT INTO Relationships VALUES ('" + mkdir_path + "','" + spec.SpecId + "', '" +scheduled_container_ids.get(0)+ "' ,"
-												+ 1 + "," + 0 + "," + i + ");";
-									} else if (i == 1) {
-										sql = "INSERT INTO Relationships VALUES ('" + mkdir_path + "','" + spec.SpecId + "', '" +scheduled_container_ids.get(i)+ "' ,"
-												+ 0 + "," + 1 + "," + i + ");";
-									} else {
-										sql = "INSERT INTO Relationships VALUES ('" + mkdir_path + "','" + spec.SpecId + "', '" +scheduled_container_ids.get(i)+ "' ,"
-												+ 0 + "," + 0 + "," + i + ");";
-									}
-									stmt.executeUpdate(sql);
+
+								// get existing max replica id
+								int max_replica_id = -1;
+								String sql_replicaid = "SELECT ReplicaId FROM Relationships WHERE Directory = '" + mkdir_path + "';";
+								ResultSet rs_replicaid = stmt.executeQuery(sql_replicaid);
+								while (rs_replicaid.next()) {
+									int id = rs_replicaid.getInt(1);
+									if (id < 0) id = -id - 1;
+									if (max_replica_id < id) max_replica_id = id;
 								}
-								System.out.println("(qm) db : File copy for specification " + spec.SpecId + " to " + scheduled_container_ids.get(i));
+
+								// Insert to Relationships and set ReplicaId, ReplicaFlag and ResolverFlag
+								int ReplicaFlag = (i == 0 ? 1 : 0);
+								int ResolverFlag = 0; // determine which container is the resolver
+								if (resolver_id == null) {
+									if (scheduled_container_ids.size() > 1 && i == 1) {
+										ResolverFlag = 1;
+									}
+								} else {
+									if (scheduled_container_ids.get(i).equals(resolver_id)) {
+										ResolverFlag = 1;
+									}
+								}
+								int ReplicaId = max_replica_id + 1;
+
+								sql = "INSERT INTO Relationships VALUES ('"
+										+ mkdir_path + "', '" + spec.SpecId + "', '"
+										+ scheduled_container_ids.get(i)+ "' ,"
+										+ ReplicaFlag + "," + ResolverFlag + "," + ReplicaId + ");";
+								stmt.executeUpdate(sql);
 							}
 						}
 						//for old containers which do not exist in new scheduled containers
-						for (int i = 0; i <container_ids_old.size(); i++) {
+						for (int i = 0; i < container_ids_old.size(); i++) {
 							if (!scheduled_container_ids.contains(container_ids_old.get(i))) {
-								//update container reserved size
-								String con_storagereserved = "SELECT StorageReserved FROM Containers WHERE ContainerId = '"
-										+ container_ids_old.get(i) + "';";
-								ResultSet con_reserved = stmt.executeQuery(con_storagereserved);
-								int container_storagereserved = con_reserved.getInt(1) - old_spec_reserved + spec.ReservedSize;
-								String sql_update_rstorage = "UPDATE Containers SET StorageReserved = " + container_storagereserved
-										+ " where ContainerID = '" + container_ids_old.get(i) + "';";
-								stmt.executeUpdate(sql_update_rstorage);
-								System.out.println("(qm) db : Delete strorage of specification " + spec.SpecId + " on " + container_ids_old.get(i));
-								//remove from relationships are left for clean replica
+								// Set replica ID to negative.
+								// Users should call --clean-replica after file copy is done.
+								sql = "SELECT ReplicaId FROM Relationships WHERE ContainerId = '"
+										+ container_ids_old.get(i) + "' AND Directory = '" + mkdir_path + "';";
+								rs = stmt.executeQuery(sql);
+								int old_replica_id = rs.getInt(1);
+								sql = "UPDATE Relationships SET ReplicaId = " + (-old_replica_id - 1)
+										+ " where ContainerID = '" + container_ids_old.get(i)
+										+ "' AND Directory = '" + mkdir_path + "';";
+								stmt.executeUpdate(sql);
+								// clean the primary flag
+								sql = "UPDATE Relationships SET ReplicaFlag = " + 0
+										+ " where ContainerID = '" + container_ids_old.get(i)
+										+ "' AND Directory = '" + mkdir_path + "';";
+								stmt.executeUpdate(sql);
 							}
 						}
-					}
-					else {
-						System.out.println("(qm) db: Error: specification should exist for existing directory");
+					} else { // if spec does not exist in db
+						System.out.println("(qm) db: Error: specification should exist for existing directory.");
+						return false;
 					}
 				}
-			}
-			else {
-				if (init==false) {
-					System.out.println("(qm) db: Error: directory should exist");
-				}
-				else {
+			} else { // if directory does not exist in db
+				if (init == false) { // update
+					System.out.println("(qm) db: Error: directory should exist in db.");
+					return false;
+				} else { // init
 					//check if spec exists
-					sql = "SELECT * FROM Specifications WHERE SpecId = '" + spec.SpecId + "';";
-					rs = stmt.executeQuery(sql);
+					String sql = "SELECT * FROM Specifications WHERE SpecId = '" + spec.SpecId + "';";
+					ResultSet rs = stmt.executeQuery(sql);
 					if (rs.next()) {
-						//update specfication
-						db_update_spec(spec,false);
-					}
-					else {
+						//update specification
+						db_update_spec(spec, false);
+					} else {
 						//insert new specification
 						sql = "INSERT INTO Specifications VALUES (" + spec.to_sql_string() + ");";
 						stmt.executeUpdate(sql);
@@ -1309,6 +1322,7 @@ public class QosManagerTool extends BaseGridTool
 		}
 		return true;
 	}
+
 	/**
 	 * QoS DB: Remove a specification from the DB.
 	 * All relationships related to this spec will be deleted. But the actual
@@ -1434,16 +1448,29 @@ public class QosManagerTool extends BaseGridTool
 			ResultSet rs = stmt.executeQuery(sql);
 
 			if (rs.next()) {
-				sql = "SELECT * FROM Relationships WHERE ContainerId = '" + container_id + "';";
+				sql = "SELECT ReplicaId FROM Relationships WHERE ContainerId = '" + container_id + "';";
 				ResultSet rs_rel = stmt.executeQuery(sql);
 
-				if (rs_rel.next()) {
-					System.out.println("(qm) db: ERROR: Specifications on container are not rescheduled.");
-					return false;
+				boolean has_replica = false;
+				boolean has_valid_replica = false;
+				while (rs_rel.next()) {
+					has_replica = true;
+					if (rs_rel.getInt(1) >= 0) has_valid_replica = true;
 				}
 
-				sql = "DELETE FROM Containers WHERE ContainerId = '" + container_id + "';";
-				stmt.executeUpdate(sql);
+				if (has_replica) {
+					if (has_valid_replica) {
+						System.out.println("(qm) db: ERROR: Specifications on container are not rescheduled.");
+						return false;
+					} else {
+						System.out.println("(qm) db: Warning: Please do --clean-replicas before removing" + container_id);
+						return true;
+					}
+				} else {
+					sql = "DELETE FROM Containers WHERE ContainerId = '" + container_id + "';";
+					stmt.executeUpdate(sql);
+				}
+
 			} else {
 				System.out.println("(qm) db: " + container_id + " does not exist in db.");
 			}
@@ -2138,7 +2165,7 @@ public class QosManagerTool extends BaseGridTool
 	 * QoS Scheduler: Schedule for a specification file
 	 * @param spec_path
 	 * @param spec_id
-	 * @return a list of scheduled container IDs
+	 * @return a list of scheduled container RNS paths
 	 */
 	private List<String> schedule_internal(String spec_path, String spec_id) {
 		assert(spec_path == null && spec_id != null || spec_path != null && spec_id == null);
@@ -2249,7 +2276,7 @@ public class QosManagerTool extends BaseGridTool
 			}
 			double cost = costs / 1024.0 * spec.ReservedSize;
 			System.out.println("(qm) Schedule results: " + scheduled_containers.toString());
-			System.out.printf("(qm) Cost: $%.2f/month", cost);
+			System.out.printf("(qm) Cost: $%.2f/month \n", cost);
 		}
 		return scheduled_containers;
 	}
@@ -2259,7 +2286,7 @@ public class QosManagerTool extends BaseGridTool
 	 * @param spec_path
 	 * @param spec_id
 	 * @param target_path
-	 * @return
+	 * @return a list of scheduled container RNS paths
 	 */
 	public List<String> schedule_wrapper(String spec_path, String spec_id, String target_path) {
 		assert(spec_path == null && spec_id != null || spec_path != null && spec_id == null);
@@ -2393,14 +2420,25 @@ public class QosManagerTool extends BaseGridTool
 			if (!satisfied) {
 				// reschedule
 				System.out.println("(qm) monitor: Reschedule directory: " + dir);
-				List<String> rescheduled_ids = schedule_internal(null, spec_ids.get(0));
-				//directory to make is needed here as second parameter
-				System.out.println("(qm) monitor: Reschedule results: " + rescheduled_ids.toString());
-				if (rescheduled_ids.isEmpty()) {
+				List<String> rescheduled_rns = schedule_internal(null, spec_ids.get(0));
+				// Convert RNS paths to container ids.
+				List<String> container_ids_new = new ArrayList<String>();
+				for (String rns: rescheduled_rns) {
+					String id = db_get_container_id_from_rns(rns);
+					if (id != null) {
+						container_ids_new.add(id);
+					} else {
+						System.out.println("(qm) Error: Cannnot lookup container ID for RNS " + rns);
+						return false;
+					}
+				}
+
+				System.out.println("(qm) monitor: Reschedule results: " + container_ids_new.toString());
+				if (container_ids_new.isEmpty()) {
 					System.out.println("(qm) monitor: Cannot reschedule " + dir + ". Please add more available containers.");
 					return false;
 				} else {
-					succ = db_add_scheduled_directory(dir, spec, rescheduled_ids, false); //update
+					succ = db_add_scheduled_directory(dir, spec, container_ids_new, false); //update
 				}
 			}
 
@@ -2425,10 +2463,11 @@ public class QosManagerTool extends BaseGridTool
 		System.out.println("(qm) monitor: Monitor all directories that are related to " + container_id);
 
 		List<String> dirs = db_rel_query(RelQuery.DIRS_RELATED_TO_CONTAINER, container_id);
+		boolean succ = true;
 		for (int i = 0; i < dirs.size(); i++) {
-			monitor_directory(dirs.get(i));
+			succ = monitor_directory(dirs.get(i)) && succ;
 		}
-		return true;
+		return succ;
 	}
 
 	/**
