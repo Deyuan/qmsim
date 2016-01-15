@@ -26,6 +26,7 @@ import java.util.Stack;
 import org.apache.axis.message.MessageElement;
 import org.apache.axis.types.URI;
 import org.ggf.rns.LookupResponseType;
+import org.ggf.rns.RNSEntryResponseType;
 import org.morgan.util.io.StreamUtils;
 import org.oasis_open.docs.wsrf.rl_2.Destroy;
 import org.oasis_open.docs.wsrf.rp_2.GetResourcePropertyDocument;
@@ -1151,6 +1152,7 @@ public class QosManagerTool extends BaseGridTool
 			stmt = conn.createStatement();
 
 			List<String> container_ids_old = db_rel_query(RelQuery.CONTAINERS_RELATED_TO_DIR, mkdir_path);
+			System.out.println("(qm) db: Previous scheduled containers: " + container_ids_old.toString());
 			if (container_ids_old.size() > 0) { // if directory exists in db
 				if (init == true) { // init
 					System.out.println("(qm) db: Error: directory should not exist if it is created for the first time.");
@@ -1193,8 +1195,19 @@ public class QosManagerTool extends BaseGridTool
 								int ReplicaFlag = (i == 0 ? 1 : 0);
 								int ResolverFlag = 0; // determine which container is the resolver
 								if (resolver_id == null) {
-									if (scheduled_container_ids.size() > 1 && i == 1) {
-										ResolverFlag = 1;
+									if (scheduled_container_ids.size() > 1) {
+										if (i == 0) {
+											String resolver_rns = null;
+											sql = "SELECT RnsPath FROM Containers WHERE ContainerId = '" + scheduled_container_ids.get(1)+ "';";
+											rs = stmt.executeQuery(sql);
+											if (rs.next()) resolver_rns = rs.getString(1);
+											if (resolver_rns != null) {
+												System.out.println("(qm) db: Create resolver on " +  resolver_rns);
+												resolver_policy(dir.lookupRNS().toString(), resolver_rns , true);
+											}
+										} else if (i == 1) {
+											ResolverFlag = 1;
+										}
 									}
 								} else {
 									if (scheduled_container_ids.get(i).equals(resolver_id)) {
@@ -1232,8 +1245,19 @@ public class QosManagerTool extends BaseGridTool
 								int ReplicaFlag = (i == 0 ? 1 : 0);
 								int ResolverFlag = 0; // determine which container is the resolver
 								if (resolver_id == null) {
-									if (scheduled_container_ids.size() > 1 && i == 1) {
-										ResolverFlag = 1;
+									if (scheduled_container_ids.size() > 1) {
+										if (i == 0) {
+											String resolver_rns = null;
+											sql = "SELECT RnsPath FROM Containers WHERE ContainerId = '" + scheduled_container_ids.get(1)+ "';";
+											rs = stmt.executeQuery(sql);
+											if (rs.next()) resolver_rns = rs.getString(1);
+											if (resolver_rns != null) {
+												System.out.println("(qm) db: Create resolver on " +  resolver_rns);
+												resolver_policy(dir.lookupRNS().toString(), resolver_rns , true);
+											}
+										} else if (i == 1) {
+											ResolverFlag = 1;
+										}
 									}
 								} else {
 									if (scheduled_container_ids.get(i).equals(resolver_id)) {
@@ -1247,6 +1271,16 @@ public class QosManagerTool extends BaseGridTool
 										+ scheduled_container_ids.get(i)+ "' ,"
 										+ ReplicaFlag + "," + ResolverFlag + "," + ReplicaId + ");";
 								stmt.executeUpdate(sql);
+
+								String replica_rns = null;
+								sql = "SELECT RnsPath FROM Containers WHERE ContainerId = '" + scheduled_container_ids.get(1)+ "';";
+								rs = stmt.executeQuery(sql);
+								if (rs.next()) replica_rns = rs.getString(1);
+								if (replica_rns != null) {
+									System.out.println("(qm) db: Create replication on " +  replica_rns);
+									GeniiPath p = new GeniiPath(replica_rns);
+									replicate_policy(dir.lookupRNS().toString(), p.lookupRNS().toString(), null);
+								}
 							}
 						}
 						//for old containers which do not exist in new scheduled containers
@@ -1463,7 +1497,7 @@ public class QosManagerTool extends BaseGridTool
 						System.out.println("(qm) db: ERROR: Specifications on container are not rescheduled.");
 						return false;
 					} else {
-						System.out.println("(qm) db: Warning: Please do --clean-replicas before removing" + container_id);
+						System.out.println("(qm) db: Warning: Please do --clean-replicas before removing container: " + container_id);
 						return true;
 					}
 				} else {
@@ -1514,6 +1548,7 @@ public class QosManagerTool extends BaseGridTool
 			id = "grid:" + path.lookupRNS();
 		}
 
+		String primary_container_id = null;
 		try {
 			Class.forName("org.sqlite.JDBC");
 			conn = DriverManager.getConnection("jdbc:sqlite:" + db_get_local_path());
@@ -1521,19 +1556,25 @@ public class QosManagerTool extends BaseGridTool
 
 			String sql = null;
 			if (q == RelQuery.SPECS_RELATED_TO_DIR) {
-				sql = "SELECT SpecId FROM Relationships WHERE Directory =";
+				sql = "SELECT SpecId FROM Relationships WHERE Directory ='" + id + "';";
 			} else if (q == RelQuery.SPECS_RELATED_TO_CONTAINER) {
-				sql = "SELECT SpecId FROM Relationships WHERE ContainerId =";
+				sql = "SELECT SpecId FROM Relationships WHERE ContainerId ='" + id + "';";
 			} else if (q == RelQuery.DIRS_RELATED_TO_SPEC) {
-				sql = "SELECT Directory FROM Relationships WHERE SpecId =";
+				sql = "SELECT Directory FROM Relationships WHERE SpecId ='" + id + "';";
 			} else if (q == RelQuery.DIRS_RELATED_TO_CONTAINER) {
-				sql = "SELECT Directory FROM Relationships WHERE ContainerId =";
+				sql = "SELECT Directory FROM Relationships WHERE ContainerId ='" + id + "';";
 			} else if (q == RelQuery.CONTAINERS_RELATED_TO_SPEC) {
-				sql = "SELECT ContainerId FROM Relationships WHERE SpecId =";
+				sql = "SELECT ContainerId FROM Relationships WHERE SpecId ='" + id + "';";
 			} else if (q == RelQuery.CONTAINERS_RELATED_TO_DIR) {
-				sql = "SELECT ContainerId FROM Relationships WHERE Directory =";
+				// should always put the primary container in the first place
+				sql = "SELECT ContainerId FROM Relationships WHERE Directory ='" + id
+						+ "' AND ReplicaFlag = 1;";
+				ResultSet rs = stmt.executeQuery(sql);
+				if (rs.next()) {
+					primary_container_id = rs.getString(1);
+				}
+				sql = "SELECT ContainerId FROM Relationships WHERE Directory ='" + id + "';";
 			}
-			sql += " '" + id + "';";
 			ResultSet rs = stmt.executeQuery(sql);
 			while (rs.next()) {
 				results.add(rs.getString(1));
@@ -1545,7 +1586,21 @@ public class QosManagerTool extends BaseGridTool
 			results.clear();
 		}
 
-		return new ArrayList<String>(results);
+		if (q == RelQuery.CONTAINERS_RELATED_TO_DIR) {
+			List<String> container_ids = new ArrayList<String>(results);
+			for (int i = 0; i < container_ids.size(); i++) {
+				if (container_ids.get(i).equals(primary_container_id)) {
+					container_ids.remove(i);
+					break;
+				}
+			}
+			if (primary_container_id != null) {
+				container_ids.add(0, primary_container_id);
+			}
+			return container_ids;
+		} else {
+			return new ArrayList<String>(results);
+		}
 	}
 
 	/**
@@ -1749,7 +1804,7 @@ public class QosManagerTool extends BaseGridTool
 			stmt = conn.createStatement();
 
 			GeniiPath path = new GeniiPath(dir);
-			String sql = "SELECT ReplicaId FROM Relationships WHERE Directory = 'grid:" + path.lookupRNS() + "';";
+			String sql = "SELECT ReplicaId FROM Relationships WHERE Directory = 'grid:" + path.lookupRNS().toString() + "';";
 			ResultSet rs = stmt.executeQuery(sql);
 			if (rs.next()) {
 				replica_ids.add(rs.getInt(1));
@@ -1813,24 +1868,24 @@ public class QosManagerTool extends BaseGridTool
 		System.out.println("#### DB Test 1: Insert container1 into db");
 		ContainerStatus status = new ContainerStatus();
 		status.ContainerId = "container1";
-		status.RnsPath = "//aaa";
+		status.RnsPath = "containers/onyx";
 		db_update_container(status, true);
 		db_summary(true);
 
 		System.out.println("#### DB Test 2: Insert container2 into db");
 		status.ContainerId = "container2";
-		status.RnsPath = "//bbb";
+		status.RnsPath = "containers/flax";
 		db_update_container(status, true);
 		db_summary(true);
 
 		System.out.println("#### DB Test 3: Update container1 into db");
 		status.ContainerId = "container1";
-		status.RnsPath = "//ccc";
+		status.RnsPath = "containers/plum";
 		status.StorageTotal = 1000;
 		db_update_container(status, false);
 		db_summary(true);
 
-		System.out.println("#### DB Test 4: Add a scheduled spec");
+		System.out.println("#### DB Test 4: Add a scheduled directory");
 		QosSpec spec = new QosSpec();
 		spec.SpecId = "client1-spec1";
 		spec.ReservedSize = 10;
@@ -1839,7 +1894,7 @@ public class QosManagerTool extends BaseGridTool
 		db_add_scheduled_directory("bck", spec, container_list, true);
 		db_summary(true);
 
-		System.out.println("#### DB Test 5: Update a scheduled spec");
+		System.out.println("#### DB Test 5: Update a scheduled directory");
 		spec.SpecId = "client1-spec1";
 		spec.ReservedSize = 20;
 		container_list.clear();
@@ -1852,7 +1907,7 @@ public class QosManagerTool extends BaseGridTool
 		db_remove_directory("bck");
 		db_summary(true);
 
-		System.out.println("#### DB Test 6: Update a scheduled spec");
+		System.out.println("#### DB Test 6: Update a scheduled directory");
 		spec.SpecId = "client1-spec1";
 		spec.ReservedSize = 30;
 		container_list.clear();
@@ -1864,7 +1919,7 @@ public class QosManagerTool extends BaseGridTool
 		db_remove_spec("client1-spec1");
 		db_summary(true);
 
-		System.out.println("#### DB Test 8: Add a scheduled spec");
+		System.out.println("#### DB Test 8: Add a scheduled directory");
 		spec.SpecId = "client1-spec1";
 		container_list.clear();
 		container_list.add("container1");
@@ -2137,7 +2192,7 @@ public class QosManagerTool extends BaseGridTool
 		if (!check_first(spec, status_list, verbose)) return false;
 
 		if (verbose) {
-			System.out.println("(qm) checker: Spec " + spec.SpecId + " is satisfied on " + container_ids.toString());
+			System.out.println("(qm) checker: Spec " + spec.SpecId + " is [satisfied] on " + container_ids.toString());
 		}
 		return true;
 	}
@@ -2193,15 +2248,15 @@ public class QosManagerTool extends BaseGridTool
 			}
 		}
 		boolean scheduled = false;
-		// try a single container
-		for (int i = 0; i < status_list.size(); i++) {
-			tmp.clear();
-			tmp.add(status_list.get(i));
-			if (check_qos(spec, tmp, false)) {
-				scheduled = true;
-				break;
-			}
-		}
+		// try a single container -- skip for now
+		//for (int i = 0; i < status_list.size(); i++) {
+		//	tmp.clear();
+		//	tmp.add(status_list.get(i));
+		//	if (check_qos(spec, tmp, false)) {
+		//		scheduled = true;
+		//		break;
+		//	}
+		//}
 		// try 2 containers
 		if (!scheduled) {
 			for (int i = 0; i < status_list.size(); i++) {
@@ -2407,6 +2462,12 @@ public class QosManagerTool extends BaseGridTool
 		System.out.println("(qm) monitor: Monitor a directory: " + dir);
 
 		if (path.exists()) {
+			try {
+				System.out.println("(qm) monitor: Replicas before monitoring:" + dir);
+				listReplicas(dir);
+			} catch (Exception e) {
+				System.out.println(e.getClass().getName() + ": " + e.getMessage());
+			}
 			List<String> spec_ids = db_rel_query(RelQuery.SPECS_RELATED_TO_DIR, dir);
 			List<String> container_ids = db_rel_query(RelQuery.CONTAINERS_RELATED_TO_DIR, dir);
 			assert(spec_ids.size() == 1 && container_ids.size() > 0);
@@ -2441,7 +2502,12 @@ public class QosManagerTool extends BaseGridTool
 					succ = db_add_scheduled_directory(dir, spec, container_ids_new, false); //update
 				}
 			}
-
+			try {
+				System.out.println("(qm) monitor: Replicas after monitoring: " + dir);
+				listReplicas(dir);
+			} catch (Exception e) {
+				System.out.println(e.getClass().getName() + ": " + e.getMessage());
+			}
 		} else {
 			// the directory may be deleted by the user, just clean the DB
 			succ = db_remove_directory(dir);
@@ -2629,7 +2695,14 @@ public class QosManagerTool extends BaseGridTool
 		System.out.println("(qm) Warning: Cleaning all unused replicas.");
 		List<String> dirs = db_get_dir_list();
 		for (int i = 0; i < dirs.size(); i++) {
-			String dir = dirs.get(i);
+			GeniiPath p = new GeniiPath(dirs.get(i));
+			String dir = p.lookupRNS().toString();
+			try {
+				System.out.println("(qm) monitor: Replicas before cleaning: " + dir);
+				listReplicas(dir);
+			} catch (Exception e) {
+				System.out.println(e.getClass().getName() + ": " + e.getMessage());
+			}
 			List<Integer> replica_ids = db_get_replica_ids_for_dir(dir);
 			for (int j = 0; j < replica_ids.size(); j++) {
 				int id = replica_ids.get(j);
@@ -2637,7 +2710,8 @@ public class QosManagerTool extends BaseGridTool
 				if (id >= 0) continue; // replicas being used
 				int err = 0;
 				try {
-					err = destroyReplica(dir, actual_id);
+					GeniiPath path = new GeniiPath(dir);
+					err = destroyReplica(path.lookupRNS().toString(), actual_id);
 				} catch (Exception e) {
 					System.out.println(e.getClass().getName() + ": " + e.getMessage());
 					err = -1;
@@ -2649,6 +2723,12 @@ public class QosManagerTool extends BaseGridTool
 					boolean succ = db_remove_replica_for_dir(dir, id);
 					assert(succ);
 					System.out.println("(qm) Remove replica ID " + actual_id + " for " + dir);
+				}
+				try {
+					System.out.println("(qm) monitor: Replicas after cleaning: " + dir);
+					listReplicas(dir);
+				} catch (Exception e) {
+					System.out.println(e.getClass().getName() + ": " + e.getMessage());
 				}
 			}
 		}
@@ -2936,6 +3016,36 @@ public class QosManagerTool extends BaseGridTool
 			common.destroy(new Destroy());
 		} catch (Throwable e) {
 			throw new ToolException("Could no destroy the replicant: " + e.getLocalizedMessage(), e);
+		}
+		return 0;
+	}
+
+	/**
+	 * Print the list of replicas to the console.
+	 * Copied from ReplicateTool.java
+	 */
+	private int listReplicas(String replicaPath)
+			throws RNSException, AuthZSecurityException, ResourceException, ToolException
+	{
+		RNSPath current = RNSPath.getCurrent();
+		RNSPath replicaRNS = current.lookup(replicaPath, RNSPathQueryFlags.MUST_EXIST);
+		EndpointReferenceType replicaEPR = replicaRNS.getEndpoint();
+		int[] list = null;
+		// First get the vector or replica numbers
+		list = ResolverUtils.getEndpoints(replicaEPR);
+		// Now look them all up and get their EPRs
+		LookupResponseType dir = ResolverUtils.getEndpointEntries(replicaEPR);
+		if (dir != null && list != null) {
+			RNSEntryResponseType[] response = dir.getEntryResponse();
+			for (int j = 0; j < response.length; j++) {
+				String temp = response[j].getEndpoint().getAddress().toString();
+				int axisIndex = temp.indexOf("/axis");
+				int containerID = temp.indexOf("container-id");
+				if (axisIndex >= 0 && containerID >= 0)
+					stdout.println("Replica " + list[j] + ": " + temp.substring(0, axisIndex) + ": " + temp.substring(containerID));
+			}
+		} else {
+			stdout.println("There are no replicas of resource " + replicaPath);
 		}
 		return 0;
 	}
