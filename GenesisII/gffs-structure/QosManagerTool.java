@@ -1573,7 +1573,8 @@ public class QosManagerTool extends BaseGridTool
 				if (rs.next()) {
 					primary_container_id = rs.getString(1);
 				}
-				sql = "SELECT ContainerId FROM Relationships WHERE Directory ='" + id + "';";
+				sql = "SELECT ContainerId FROM Relationships WHERE Directory ='" + id
+						+ "' AND ReplicaFlag >= 0;";
 			}
 			ResultSet rs = stmt.executeQuery(sql);
 			while (rs.next()) {
@@ -1835,8 +1836,34 @@ public class QosManagerTool extends BaseGridTool
 			stmt = conn.createStatement();
 
 			GeniiPath path = new GeniiPath(dir);
-			String sql = "DELETE FROM Relationships WHERE Directory = 'grid:" + path.lookupRNS() + "' AND ReplicaId = " + replica_id + ";";
-			stmt.executeQuery(sql);
+			dir = path.lookupRNS().toString();
+
+			// If the replica server is also the resolver server, then only
+			// set the ReplicaFlag to -1.
+			String sql = "SELECT * FROM Relationships WHERE Directory = 'grid:" + dir + "' AND ResolverFlag = 1;";
+			ResultSet rs = stmt.executeQuery(sql);
+			if (rs.next()) {
+				int resolver_replicaFlag = rs.getInt(4);
+				int resolver_replicaId = rs.getInt(6);
+				if (resolver_replicaId == replica_id) {
+					if (resolver_replicaFlag >= 0) {
+						sql = "UPDATE Relationships SET ReplicaFlag = -1 " +
+								" WHERE Directory = 'grid:" + dir + "' AND ReplicaId = " + replica_id + ";";
+						stmt.executeUpdate(sql);
+						sql = "UPDATE Relationships SET ReplicaId = 9999 " +
+								" WHERE Directory = 'grid:" + dir + "' AND ReplicaId = " + replica_id + ";";
+						stmt.executeUpdate(sql);
+					} else {
+						// do not delete
+					}
+				} else {
+					sql = "DELETE FROM Relationships WHERE Directory = 'grid:" + dir + "' AND ReplicaId = " + replica_id + ";";
+					stmt.executeUpdate(sql);
+				}
+			} else {
+				sql = "DELETE FROM Relationships WHERE Directory = 'grid:" + dir + "' AND ReplicaId = " + replica_id + ";";
+				stmt.executeUpdate(sql);
+			}
 			stmt.close();
 			conn.close();
 		} catch (Exception e) {
