@@ -23,7 +23,7 @@ The following options are available:
 --rm-container=<container-id>
     Remove a container from the QoS database.
 --monitor
-    Monitor all QoS specifications in the QoS database, and reschedule the
+    Monitor all QoS specifications in the QoS database, and reschedule
     unsatisfied ones.
 --clean-replicas
     Cleaning all unused replicas. Users should make sure that file-copy

@@ -12,10 +12,10 @@ CostPerGBMonth, 2.0	# $
 DataIntegrity, 2	# 0:worst
 StorageReserved, 0	# MB
 StorageUsed, 0	# MB
-StorageReliability, 50
+StorageReliability, 90
 ContainerAvailability, 95
 StorageRBW_dyn, 99.0	# MB/s
 StorageWBW_dyn, 0.0	# MB/s
 PhysicalLocation, /usa/virginia/uva/cs
-RnsPath, grid:/home/xcg.virginia.edu/dg7vp/qmsim/containers/flax
+RnsPath, ./flax
 StatusPath,
