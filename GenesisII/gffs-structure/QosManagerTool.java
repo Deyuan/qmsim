@@ -1279,7 +1279,7 @@ public class QosManagerTool extends BaseGridTool
 								stmt.executeUpdate(sql);
 
 								String replica_rns = null;
-								sql = "SELECT RnsPath FROM Containers WHERE ContainerId = '" + scheduled_container_ids.get(1)+ "';";
+								sql = "SELECT RnsPath FROM Containers WHERE ContainerId = '" + scheduled_container_ids.get(i)+ "';";
 								rs = stmt.executeQuery(sql);
 								if (rs.next()) replica_rns = rs.getString(1);
 								if (replica_rns != null) {
@@ -2143,12 +2143,12 @@ public class QosManagerTool extends BaseGridTool
 	private boolean check_first(QosSpec spec, List<ContainerStatus> status_list, boolean verbose) {
 		// Check bandwidth
 		if (!check_bandwidth(spec, status_list)) {
-			if (verbose) System.out.println("(qm) checker: Bandwidth not satisfied for spec: " + spec.SpecId);
+			if (verbose) System.out.println("(qm) checker: Bandwidth [not satisfied] for spec: " + spec.SpecId);
 			return false;
 		}
 		// Check latency
 		if (!check_latency(spec, status_list)) {
-			if (verbose) System.out.println("(qm) checker: Latency not satisfied for spec: " + spec.SpecId);
+			if (verbose) System.out.println("(qm) checker: Latency [not satisfied] for spec: " + spec.SpecId);
 			return false;
 		}
 		return true;
@@ -2164,12 +2164,12 @@ public class QosManagerTool extends BaseGridTool
 	private boolean check_each(QosSpec spec, List<ContainerStatus> status_list, boolean verbose) {
 		// Check disk space
 		if (!check_space(spec, status_list)) {
-			if (verbose) System.out.println("(qm) checker: Disk space not satisfied for spec: " + spec.SpecId);
+			if (verbose) System.out.println("(qm) checker: Disk space [not satisfied] for spec: " + spec.SpecId);
 			return false;
 		}
 		// Check data integrity
 		if (!check_dataintegrity(spec, status_list)) {
-			if (verbose) System.out.println("(qm) checker: Dataintegrity not satisfied for spec: " + spec.SpecId);
+			if (verbose) System.out.println("(qm) checker: Data integrity [not satisfied] for spec: " + spec.SpecId);
 			return false;
 		}
 		return true;
@@ -2185,12 +2185,12 @@ public class QosManagerTool extends BaseGridTool
 	private boolean check_all(QosSpec spec, List<ContainerStatus> status_list, boolean verbose) {
 		// Check reliability
 		if (!check_reliability(spec, status_list)) {
-			if (verbose) System.out.println("(qm) checker: Reliability not satisfied for spec: " + spec.SpecId);
+			if (verbose) System.out.println("(qm) checker: Reliability [not satisfied] for spec: " + spec.SpecId);
 			return false;
 		}
 		// Check availability
 		if (!check_availability(spec, status_list)) {
-			if (verbose) System.out.println("(qm) checker: Availability not satisfied for spec: " + spec.SpecId);
+			if (verbose) System.out.println("(qm) checker: Availability [not satisfied] for spec: " + spec.SpecId);
 			return false;
 		}
 		return true;
