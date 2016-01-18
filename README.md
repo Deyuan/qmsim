@@ -1,5 +1,5 @@
-# qmsim
-
+# QoS Manager
+```
 A tool for managing the quality of service in Genesis II for GFFS.
 
 qos-manager [--init-db]
@@ -54,3 +54,4 @@ The following options are available:
 Related tools:
 mkdir <target-dir> [--specs=<qos-spec-path>]
     Create a dynamically scheduled folder with a QoS specification file.
+```
